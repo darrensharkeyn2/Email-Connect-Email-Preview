@@ -496,22 +496,22 @@ async function selectCampaign(id) {
   renderCampSidebar();
   renderDashPreview();
   try {
-    const { data } = await db.from('Comments')
+  const { data: dashData } = await db.from('Comments')
       .select('*')
       .eq('campaign_id', id)
       .order('created_at', { ascending: false });
-    if (data) {
-      // Only replace comments for this campaign, keep others
-      state.comments = [
-        ...state.comments.filter(c => c.campaignId !== id),
-        ...data.map(c => ({
-          ...c,
-          campaignId: c.campaign_id,
-          highlight: c.referring_to,
-          created: new Date(c.created_at).getTime()
-        }))
-      ];
-    }
+
+  // Only replace comments for this campaign, keep others
+  state.comments = [
+    ...state.comments.filter(c => String(c.campaignId) !== String(id)),
+    ...(dashData || []).map(c => ({
+      ...c,
+      id: String(c.id),
+      campaignId: String(c.campaign_id),
+      highlight: c.referring_to,
+      created: new Date(c.created_at).getTime()
+    }))
+  ];
   } catch(e) {}
   renderDashComments();
   renderCampSidebar();
@@ -529,41 +529,26 @@ function renderDashPreview() {
     return;
   }
   const comments = state.comments.filter(c => String(c.campaignId) === String(camp.id));
-  const pinnedComments = comments.filter(c => c.pin);
   const open = comments.filter(c => !c.resolved).length;
   label.textContent = camp.name + ' — ' + camp.client;
   stats.textContent = open + ' open · ' + (comments.length - open) + ' resolved';
 
-  area.innerHTML = `<div class="email-frame-wrap" style="width:620px;">
+  area.innerHTML = `<div class="email-frame-wrap" style="width:100%;max-width:680px;">
     <div class="email-frame-header">
       <div class="dot" style="background:#f09595;"></div>
       <div class="dot" style="background:#fac775;"></div>
       <div class="dot" style="background:#97c459;"></div>
       <span style="font-size:12px;color:#888;margin-left:8px;">${camp.name}</span>
     </div>
-    <div style="position:relative;" id="dash-pin-container">
-      <iframe id="dash-email-iframe" style="width:100%;border:none;min-height:400px;display:block;" srcdoc="${escapeAttr(camp.html)}" sandbox="allow-same-origin allow-popups"></iframe>
-      <div id="dash-pins-layer" style="position:absolute;top:0;left:0;width:100%;pointer-events:none;z-index:11;"></div>
-    </div>
+    <iframe id="dash-email-iframe" style="width:100%;border:none;min-height:600px;display:block;" srcdoc="${escapeAttr(camp.html)}" sandbox="allow-same-origin allow-popups"></iframe>
   </div>`;
 
-  // Wait for iframe to load then place pins at correct positions
   const iframe = document.getElementById('dash-email-iframe');
   if (iframe) {
     iframe.onload = () => {
       try {
         const h = iframe.contentDocument.body.scrollHeight;
-        const fullHeight = h + 40;
-        iframe.style.height = fullHeight + 'px';
-
-        // Now render pins using actual height
-        const pinsLayer = document.getElementById('dash-pins-layer');
-        if (pinsLayer) {
-          pinsLayer.style.height = fullHeight + 'px';
-          pinsLayer.innerHTML = pinnedComments.map((c, i) =>
-            `<div class="pin pin-placed" style="left:${c.pin.x}%;top:${c.pin.y}%;pointer-events:auto;cursor:pointer;position:absolute;" title="${c.author}: ${c.text}" onclick="highlightDashComment('${c.id}')">${i + 1}</div>`
-          ).join('');
-        }
+        iframe.style.height = (h + 40) + 'px';
       } catch(e) {}
     };
   }
@@ -612,10 +597,13 @@ function renderDashComments() {
     }).join('');
 }
 
-function toggleResolve(id) {
-  const c = state.comments.find(x => x.id === id);
+async function toggleResolve(id) {
+  const c = state.comments.find(x => String(x.id) === String(id));
   if (c) {
     c.resolved = !c.resolved;
+    try {
+      await db.from('Comments').update({ resolved: c.resolved }).eq('id', id);
+    } catch(e) {}
     renderDashComments();
     renderCampSidebar();
     renderCampaignList();
