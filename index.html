@@ -731,46 +731,22 @@ function setupHighlightListener() {
   const iframe = document.getElementById('client-email-iframe');
   if (!iframe) return;
   try {
-    const frameWindow = iframe.contentWindow;
-    const frameDoc = frameWindow && frameWindow.document;
-    if (!frameDoc) return;
-
-    // Listen inside iframe
-    frameDoc.addEventListener('mouseup', () => setTimeout(captureSelection, 50));
-    frameDoc.addEventListener('keyup', () => setTimeout(captureSelection, 50));
-
-    // Also listen on parent document in case mouseup fires there
-    document.addEventListener('mouseup', () => setTimeout(captureSelection, 50));
+    iframe.contentDocument.addEventListener('mouseup', captureSelection);
   } catch(e) { console.warn('highlight listener failed:', e); }
 }
 
 function captureSelection() {
   const iframe = document.getElementById('client-email-iframe');
-  if (!iframe) return;
   try {
-    const frameWindow = iframe.contentWindow;
-    const frameDoc = frameWindow && frameWindow.document;
-    if (!frameDoc) return;
-
-    let text = '';
-    // Try all three methods
-    if (frameWindow.getSelection) {
-      text = String(frameWindow.getSelection()).trim();
-    }
-    if (!text && frameDoc.getSelection) {
-      text = String(frameDoc.getSelection()).trim();
-    }
-    if (!text && frameDoc.selection) {
-      text = frameDoc.selection.createRange().text.trim();
-    }
-
+    const selection = iframe.contentDocument.getSelection();
+    const text = selection ? selection.toString().trim() : '';
     if (text.length > 0) {
       selectedHighlight = text;
       const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
       document.getElementById('highlight-text-preview').textContent = '"' + preview + '"';
       document.getElementById('highlight-indicator').style.display = 'flex';
     }
-  } catch(e) {}
+  } catch(e) { console.warn('captureSelection failed:', e); }
 }
 
 function clearHighlight() {
