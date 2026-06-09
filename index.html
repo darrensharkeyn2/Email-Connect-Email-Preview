@@ -731,23 +731,33 @@ function setupHighlightListener() {
   const iframe = document.getElementById('client-email-iframe');
   if (!iframe) return;
   try {
-    iframe.contentDocument.addEventListener('mouseup', captureSelection);
-  } catch(e) { console.warn('highlight listener failed:', e); }
+    const doc = iframe.contentDocument;
+    // Inject postMessage script directly into iframe
+    const script = doc.createElement('script');
+    script.textContent = `
+      document.addEventListener('mouseup', function() {
+        var text = '';
+        if (window.getSelection) text = window.getSelection().toString().trim();
+        if (text.length > 0) {
+          window.parent.postMessage({ type: 'selection', text: text }, '*');
+        }
+      });
+    `;
+    doc.body.appendChild(script);
+  } catch(e) { console.warn('highlight setup failed:', e); }
 }
 
-function captureSelection() {
-  const iframe = document.getElementById('client-email-iframe');
-  try {
-    const selection = iframe.contentDocument.getSelection();
-    const text = selection ? selection.toString().trim() : '';
-    if (text.length > 0) {
-      selectedHighlight = text;
-      const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
-      document.getElementById('highlight-text-preview').textContent = '"' + preview + '"';
-      document.getElementById('highlight-indicator').style.display = 'flex';
-    }
-  } catch(e) { console.warn('captureSelection failed:', e); }
-}
+// Listen for postMessage from iframe
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'selection' && e.data.text) {
+    selectedHighlight = e.data.text;
+    const preview = e.data.text.length > 60 ? e.data.text.slice(0, 60) + '...' : e.data.text;
+    document.getElementById('highlight-text-preview').textContent = '"' + preview + '"';
+    document.getElementById('highlight-indicator').style.display = 'flex';
+  }
+});
+
+function captureSelection() {} // kept for compatibility
 
 function clearHighlight() {
   selectedHighlight = null;
