@@ -241,7 +241,6 @@
       </div>
       <div class="comment-form">
         <input class="name-input" id="commenter-name" placeholder="Your name" />
-        <input class="name-input" id="referring-to" placeholder="Referring to... (e.g. 'the headline' or 'blue button')" style="font-style:italic;" />
         <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed..."></textarea>
         <div>
           <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
@@ -491,10 +490,27 @@ function renderCampSidebar() {
   }).join('');
 }
 
-function selectCampaign(id) {
+async function selectCampaign(id) {
   state.activeCampaignId = id;
   renderCampSidebar();
   renderDashPreview();
+  // Refresh comments from Supabase for this campaign
+  try {
+    const { data } = await db.from('Comments')
+      .select('*')
+      .eq('campaign_id', id)
+      .order('created_at', { ascending: false });
+    if (data) {
+      // Merge in fresh comments for this campaign
+      state.comments = state.comments.filter(c => c.campaignId !== id);
+      state.comments.push(...data.map(c => ({
+        ...c,
+        campaignId: c.campaign_id,
+        highlight: c.referring_to,
+        created: new Date(c.created_at).getTime()
+      })));
+    }
+  } catch(e) {}
   renderDashComments();
 }
 
@@ -620,6 +636,10 @@ function renderClientView() {
     try {
       const h = iframe.contentDocument.body.scrollHeight;
       iframe.style.height = (h + 40) + 'px';
+      // Disable all link/button clicks so they don't navigate away
+      const style = iframe.contentDocument.createElement('style');
+      style.textContent = 'a, button, [href], input[type="submit"] { pointer-events: none !important; cursor: default !important; }';
+      iframe.contentDocument.head.appendChild(style);
     } catch(e) {}
     setupHighlightListener();
   };
@@ -771,14 +791,12 @@ function deleteComment(id) {
 async function submitComment() {
   const author = document.getElementById('commenter-name').value.trim() || 'Client';
   const text = document.getElementById('comment-body').value.trim();
-  const referringTo = document.getElementById('referring-to').value.trim();
+  const finalReference = selectedHighlight || null;
   const camp = state.activeCampaignId
     ? state.campaigns.find(c => c.id === state.activeCampaignId)
     : state.campaigns[state.campaigns.length - 1];
   if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
   if (!camp) { showToast('No email loaded'); return; }
-
-  const finalReference = referringTo || selectedHighlight || null;
 
   const comment = {
     campaign_id: camp.id,
@@ -789,7 +807,7 @@ async function submitComment() {
     created_at: new Date().toISOString()
   };
 
-  const { data, error } = await db.from('comments').insert(comment).select().single();
+  const { data, error } = await db.from('Comments').insert(comment).select().single();
 
   const localComment = {
     id: data ? data.id : uid(),
@@ -804,7 +822,6 @@ async function submitComment() {
 
   state.comments.unshift(localComment);
   document.getElementById('comment-body').value = '';
-  document.getElementById('referring-to').value = '';
   removeImage();
   clearHighlight();
   renderClientComments(camp.id);
@@ -815,22 +832,35 @@ async function submitComment() {
 }
 
 async function init() {
+  // Check for review link first
+  const params = new URLSearchParams(window.location.search);
+  const reviewId = params.get('review');
+
   try {
     const [{ data: campaigns }, { data: comments }] = await Promise.all([
       db.from('campaigns').select('*').order('created_at', { ascending: false }),
-      db.from('comments').select('*').order('created_at', { ascending: false })
+      db.from('Comments').select('*').order('created_at', { ascending: false })
     ]);
     if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, created: new Date(c.created_at).getTime() }));
-    if (comments) state.comments = comments.map(c => ({ ...c, campaignId: c.campaign_id, referringTo: c.referring_to, highlight: c.referring_to, created: new Date(c.created_at).getTime() }));
-  } catch(e) { console.warn('Supabase load failed, using local state'); }
+    if (comments) state.comments = comments.map(c => ({
+      ...c,
+      campaignId: c.campaign_id,
+      referringTo: c.referring_to,
+      highlight: c.referring_to,
+      created: new Date(c.created_at).getTime()
+    }));
+  } catch(e) { console.warn('Supabase load failed:', e); }
 
-  renderCampaignList();
-
-  const params = new URLSearchParams(window.location.search);
-  const reviewId = params.get('review');
+  // If review link, go straight to client view with correct campaign
   if (reviewId) {
     state.activeCampaignId = reviewId;
-    switchView('client', document.querySelectorAll('.nav-btn')[2]);
+    // Hide nav so client can't switch to agency view
+    document.querySelector('.topbar-nav').style.display = 'none';
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-client').classList.add('active');
+    renderClientView();
+  } else {
+    renderCampaignList();
   }
 }
 
