@@ -225,7 +225,7 @@
             <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
           </div>
           <div style="position:relative;" id="email-pin-container">
-            <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups"></iframe>
+            <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups allow-scripts"></iframe>
           </div>
         </div>
       </div>
@@ -625,19 +625,22 @@ function renderClientView() {
   document.getElementById('client-camp-title').textContent = camp.name + ' — ' + camp.client;
 
   const iframe = document.getElementById('client-email-iframe');
-  iframe.srcdoc = camp.html;
+  // Embed postMessage selection script directly into the email HTML
+  const selectionScript = `<script>document.addEventListener('mouseup',function(){var t=window.getSelection?window.getSelection().toString().trim():'';if(t)window.parent.postMessage({type:'email-selection',text:t},'*');});<\/script>`;
+  const htmlWithScript = camp.html.includes('</body>')
+    ? camp.html.replace('</body>', selectionScript + '</body>')
+    : camp.html + selectionScript;
+  iframe.srcdoc = htmlWithScript;
   iframe.onload = () => {
     try {
       const h = iframe.contentDocument.body.scrollHeight;
       iframe.style.height = (h + 40) + 'px';
-      // Block link navigation without disabling pointer events (which breaks text selection)
-      const doc = iframe.contentDocument;
-      doc.addEventListener('click', (e) => {
+      // Block link navigation without disabling text selection
+      iframe.contentDocument.addEventListener('click', (e) => {
         const link = e.target.closest('a, button');
         if (link) e.preventDefault();
       }, true);
     } catch(e) {}
-    setupHighlightListener();
   };
   renderClientComments(camp.id);
 }
@@ -728,32 +731,19 @@ function closeLightbox() {
 let selectedHighlight = null;
 
 function setupHighlightListener() {
-  const iframe = document.getElementById('client-email-iframe');
-  if (!iframe) return;
-  try {
-    const doc = iframe.contentDocument;
-    // Inject postMessage script directly into iframe
-    const script = doc.createElement('script');
-    script.textContent = `
-      document.addEventListener('mouseup', function() {
-        var text = '';
-        if (window.getSelection) text = window.getSelection().toString().trim();
-        if (text.length > 0) {
-          window.parent.postMessage({ type: 'selection', text: text }, '*');
-        }
-      });
-    `;
-    doc.body.appendChild(script);
-  } catch(e) { console.warn('highlight setup failed:', e); }
+  // Selection is now handled via postMessage injected into srcdoc HTML
+  // See renderClientView where selectionScript is embedded into camp.html
 }
 
-// Listen for postMessage from iframe
+// Listen for text selection postMessage from iframe
 window.addEventListener('message', function(e) {
-  if (e.data && e.data.type === 'selection' && e.data.text) {
+  if (e.data && e.data.type === 'email-selection' && e.data.text) {
     selectedHighlight = e.data.text;
     const preview = e.data.text.length > 60 ? e.data.text.slice(0, 60) + '...' : e.data.text;
-    document.getElementById('highlight-text-preview').textContent = '"' + preview + '"';
-    document.getElementById('highlight-indicator').style.display = 'flex';
+    const previewEl = document.getElementById('highlight-text-preview');
+    const indicatorEl = document.getElementById('highlight-indicator');
+    if (previewEl) previewEl.textContent = '"' + preview + '"';
+    if (indicatorEl) indicatorEl.style.display = 'flex';
   }
 });
 
