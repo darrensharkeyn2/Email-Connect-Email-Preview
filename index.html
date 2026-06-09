@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Connect — N2 Digital</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f3; color: #1a1a18; min-height: 100vh; }
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { background: #0d0d1a; border-bottom: 0.5px solid rgba(255,255,255,0.1); padding: 0 1.5rem; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { display: flex; align-items: center; gap: 10px; }
+  .topbar-logo img { height: 28px; }
+  .topbar-logo-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.15); }
+  .topbar-logo-app { font-size: 13px; color: #39e07a; letter-spacing: 0.04em; font-weight: 600; }
+  .topbar-nav { display: flex; gap: 4px; }
+  .nav-btn { font-size: 13px; padding: 6px 14px; border-radius: 8px; border: 0.5px solid transparent; cursor: pointer; background: transparent; color: rgba(255,255,255,0.5); transition: all 0.15s; }
+  .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .nav-btn.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 500; border-color: rgba(255,255,255,0.15); }
+  .view { display: none; flex: 1; }
+  .view.active { display: flex; }
+  .agency-view { flex-direction: column; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; gap: 1.5rem; }
+  .card { background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 12px; padding: 1.25rem 1.5rem; }
+  .section-label { font-size: 12px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .email-input-area { width: 100%; min-height: 160px; font-family: monospace; font-size: 12px; resize: vertical; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 12px; background: #f5f5f3; color: #1a1a18; outline: none; }
+  .email-input-area:focus { border-color: #39e07a; }
+  .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 13px; color: #888; }
+  .field-input { padding: 8px 12px; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; font-size: 14px; background: #fff; color: #1a1a18; outline: none; }
+  .field-input:focus { border-color: #39e07a; }
+  .btn-primary { background: linear-gradient(135deg, #39d98a, #00c2ff); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: transparent; color: #1a1a18; border: 0.5px solid rgba(0,0,0,0.3); padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { background: #f1efe8; }
+  .link-box { display: flex; align-items: center; gap: 8px; background: #f1efe8; border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
+  .link-text { font-family: monospace; font-size: 12px; color: #39e07a; flex: 1; word-break: break-all; }
+  .copy-btn { font-size: 12px; color: #888; background: transparent; border: none; cursor: pointer; padding: 4px 8px; white-space: nowrap; }
+  .copy-btn:hover { color: #1a1a18; }
+  .campaigns-list { display: flex; flex-direction: column; gap: 8px; }
+  .campaign-row { display: flex; align-items: center; padding: 12px 16px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; gap: 12px; cursor: pointer; transition: border-color 0.15s; }
+  .campaign-row:hover { border-color: #39e07a; }
+  .campaign-info { flex: 1; }
+  .campaign-name { font-size: 14px; font-weight: 500; }
+  .campaign-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .comment-badge { background: #e8faf1; color: #0d7a4e; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .comment-badge.unread { background: #39e07a; color: #fff; }
+  .empty-state { text-align: center; padding: 3rem; color: #888; font-size: 14px; }
+  .dashboard-view { flex-direction: row; }
+  .sidebar { width: 280px; min-width: 280px; background: #fff; border-right: 0.5px solid rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar-header { padding: 1rem 1.25rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+  .camp-sidebar-item { padding: 12px 16px; border-bottom: 0.5px solid rgba(0,0,0,0.08); cursor: pointer; transition: background 0.1s; display: flex; align-items: center; gap: 10px; }
+  .camp-sidebar-item:hover { background: #f5f5f3; }
+  .camp-sidebar-item.active { background: #f0fdf6; border-left: 3px solid #39e07a; }
+  .camp-sidebar-avatar { width: 36px; height: 36px; border-radius: 8px; background: #e8faf1; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #0d7a4e; flex-shrink: 0; position: relative; }
+  .camp-sidebar-info { flex: 1; min-width: 0; }
+  .camp-sidebar-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .camp-sidebar-meta { font-size: 11px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .notif-badge { background: #39e07a; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; flex-shrink: 0; }
+  .notif-badge.resolved-all { background: #e8faf1; color: #0d7a4e; }
+  .comment-item { padding: 10px 14px; border-bottom: 0.5px solid rgba(0,0,0,0.08); cursor: pointer; transition: background 0.1s; }
+  .comment-item:hover { background: #f5f5f3; }
+  .comment-item.resolved { opacity: 0.5; }
+  .comment-author { font-size: 12px; font-weight: 500; }
+  .comment-text { font-size: 12px; color: #888; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .comment-time { font-size: 11px; color: #888; margin-top: 4px; }
+  .comment-status { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; font-weight: 500; }
+  .comment-status.open { background: #faeeda; color: #854F0B; }
+  .comment-status.resolved { background: #e8faf1; color: #0d7a4e; }
+  .main-dashboard { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .preview-area { flex: 1; overflow-y: auto; background: #f5f5f3; padding: 1.5rem; display: flex; justify-content: center; }
+  .email-frame-wrap { background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 12px; width: 620px; min-height: 200px; overflow: hidden; }
+  .email-frame-header { padding: 12px 16px; border-bottom: 0.5px solid rgba(0,0,0,0.15); display: flex; gap: 6px; align-items: center; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .comment-detail-bar { padding: 1rem 1.25rem; background: #fff; border-top: 0.5px solid rgba(0,0,0,0.15); display: none; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  .comment-detail-bar.open { display: flex; }
+  .detail-comment { padding: 10px 14px; background: #f5f5f3; border-radius: 8px; }
+  .detail-comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .detail-author { font-size: 13px; font-weight: 500; }
+  .resolve-btn { font-size: 11px; color: #0d7a4e; background: #e8faf1; border: none; padding: 3px 10px; border-radius: 10px; cursor: pointer; }
+  .resolve-btn.undo { color: #854F0B; background: #faeeda; }
+  .detail-body { font-size: 13px; color: #888; }
+  .detail-time { font-size: 11px; color: #888; margin-top: 4px; }
+  .client-view { flex-direction: row; }
+  .client-preview { flex: 1; background: #f5f5f3; overflow-y: auto; padding: 1.5rem 2rem; display: flex; justify-content: center; }
+  .client-sidebar { width: 340px; min-width: 340px; background: #fff; border-left: 0.5px solid rgba(0,0,0,0.15); display: flex; flex-direction: column; }
+  .client-sidebar-header { padding: 1.25rem 1.5rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); }
+  .client-sidebar-title { font-size: 15px; font-weight: 500; }
+  .client-sidebar-sub { font-size: 12px; color: #888; margin-top: 3px; }
+  .comment-form { padding: 1.25rem 1.5rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; }
+  .comment-textarea { width: 100%; min-height: 90px; font-size: 13px; resize: vertical; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 10px 12px; font-family: system-ui, sans-serif; background: #f5f5f3; color: #1a1a18; outline: none; }
+  .comment-textarea:focus { border-color: #39e07a; }
+  .name-input { padding: 8px 12px; font-size: 13px; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; background: #fff; color: #1a1a18; outline: none; width: 100%; }
+  .name-input:focus { border-color: #39e07a; }
+  .client-comments-list { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 8px; }
+  .client-comment-card { padding: 10px 12px; background: #f5f5f3; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.15); }
+  .client-comment-name { font-size: 12px; font-weight: 500; margin-bottom: 3px; }
+  .client-comment-body { font-size: 13px; }
+  .client-comment-time { font-size: 11px; color: #888; margin-top: 4px; }
+  .email-iframe { width: 100%; border: none; min-height: 600px; display: block; }
+  .pin { position: absolute; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .pin-pending { background: #f97040; animation: pulse 1.2s infinite; }
+  .pin-placed { background: #39e07a; color: #0a0d1f; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(249,112,64,0.5); } 50% { box-shadow: 0 0 0 6px rgba(249,112,64,0); } }
+  .pin-ref { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #39e07a; color: #0a0d1f; font-size: 10px; font-weight: 700; margin-right: 5px; flex-shrink: 0; }
+  .success-toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: #39e07a; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .success-toast.show { opacity: 1; }
+  .attach-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; background: transparent; border: 0.5px solid rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s; width: fit-content; }
+  .attach-btn:hover { background: #f1efe8; color: #1a1a18; }
+  .image-preview-wrap { position: relative; display: inline-block; margin-top: 4px; }
+  .image-preview { max-width: 100%; max-height: 120px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); display: block; }
+  .remove-image { position: absolute; top: -6px; right: -6px; background: #ff5c5c; color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .comment-image { max-width: 100%; border-radius: 6px; margin-top: 6px; border: 0.5px solid rgba(0,0,0,0.15); display: block; cursor: pointer; }
+  .detail-image { max-width: 100%; border-radius: 6px; margin-top: 8px; border: 0.5px solid rgba(0,0,0,0.15); display: block; cursor: pointer; }
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center; }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+  .camp-sidebar-item:hover .edit-icon { opacity: 1; }
+  .edit-icon { opacity: 0; transition: opacity 0.15s; background: none; border: none; cursor: pointer; color: #888; padding: 4px; border-radius: 4px; display: flex; align-items: center; flex-shrink: 0; }
+  .edit-icon:hover { color: #1a1a18; background: rgba(0,0,0,0.06); }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 1.5rem; width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+  .modal-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+  .modal-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .modal-label { font-size: 12px; color: #888; }
+  .modal-input { padding: 8px 12px; border: 0.5px solid rgba(0,0,0,0.2); border-radius: 8px; font-size: 14px; outline: none; width: 100%; }
+  .modal-input:focus { border-color: #39e07a; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="topbar-logo">
+      <img src="https://n2.digital/wp-content/uploads/2023/02/Full_Logo_DarkBG-0.svg" alt="N2 Digital" onerror="this.style.display='none';document.getElementById('fallback-logo').style.display='flex';" />
+      <span id="fallback-logo" style="display:none;color:#fff;font-size:15px;font-weight:700;letter-spacing:-0.3px;">N2 <span style="color:#39e07a;">Digital</span></span>
+    </div>
+    <div class="topbar-nav">
+      <button class="nav-btn active" onclick="switchView('agency', this)">Agency</button>
+      <button class="nav-btn" onclick="switchView('dashboard', this)">Dashboard</button>
+      <button class="nav-btn" onclick="switchView('client', this)">Client Preview</button>
+    </div>
+  </div>
+
+  <!-- AGENCY VIEW -->
+  <div class="view active" id="view-agency">
+    <div class="agency-view">
+      <div class="card">
+        <div class="section-label">New email for review</div>
+        <div class="fields-row" style="margin-bottom:12px;">
+          <div class="field-group">
+            <div class="field-label">Campaign name</div>
+            <input class="field-input" id="camp-name" placeholder="e.g. June Newsletter" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Client name</div>
+            <input class="field-input" id="client-name" placeholder="e.g. Acme Corp" />
+          </div>
+        </div>
+        <div class="field-label" style="margin-bottom:6px;">Paste email HTML from GHL</div>
+        <textarea class="email-input-area" id="email-html" placeholder="Paste your full email HTML here. Start from <!DOCTYPE html> or <html>."></textarea>
+        <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
+          <button class="btn-primary" onclick="createCampaign()">Generate review link</button>
+          <button class="btn-secondary" onclick="loadDemo()">Load demo email</button>
+        </div>
+        <div id="link-result" style="display:none;">
+          <div class="link-box">
+            <div class="link-text" id="generated-link"></div>
+            <button class="copy-btn" onclick="copyLink()">Copy</button>
+          </div>
+          <div style="font-size:12px; color:#888; margin-top:6px;">
+            💡 For this demo, use the <strong>Client Preview</strong> tab to simulate what your client sees.
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-label">Active campaigns</div>
+        <div class="campaigns-list" id="campaigns-list">
+          <div class="empty-state">No campaigns yet. Create one above.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD VIEW -->
+  <div class="view" id="view-dashboard">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Campaigns</span>
+        <span id="sidebar-camp-count" style="font-size:11px;color:#888;font-weight:400;"></span>
+      </div>
+      <div id="camp-sidebar-list" style="flex:1;overflow-y:auto;"></div>
+    </div>
+    <div class="main-dashboard">
+      <div style="padding:1rem 1.5rem;border-bottom:0.5px solid rgba(0,0,0,0.15);background:#fff;display:flex;align-items:center;gap:12px;">
+        <div id="dash-campaign-label" style="font-size:14px;font-weight:500;flex:1;">Select a campaign</div>
+        <div id="dash-stats" style="font-size:12px;color:#888;"></div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="preview-area" id="dash-preview" style="flex:1;">
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;font-size:14px;">Select a campaign from the sidebar</div>
+        </div>
+        <div id="dash-comments-panel" style="background:#fff;border-top:0.5px solid rgba(0,0,0,0.15);max-height:280px;overflow-y:auto;display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENT VIEW -->
+  <div class="view" id="view-client">
+    <div class="client-preview">
+      <div style="width:100%;max-width:680px;">
+        <div class="email-frame-wrap" style="width:100%;">
+          <div class="email-frame-header">
+            <div class="dot" style="background:#f09595;"></div>
+            <div class="dot" style="background:#fac775;"></div>
+            <div class="dot" style="background:#97c459;"></div>
+            <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject">Email Preview</span>
+            <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
+          </div>
+          <div style="position:relative;" id="email-pin-container">
+            <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="client-sidebar">
+      <div class="client-sidebar-header">
+        <div class="client-sidebar-title" id="client-camp-title">Leave your feedback</div>
+        <div class="client-sidebar-sub">Select text in the email to reference it, then leave your comment below</div>
+      </div>
+      <div id="highlight-indicator" style="display:none;padding:10px 1.5rem;background:#f0fdf6;border-bottom:0.5px solid #c6f6d5;font-size:12px;color:#0d7a4e;align-items:center;gap:8px;">
+        <div style="flex:1;">
+          <div style="font-weight:500;margin-bottom:2px;">✏️ Referencing:</div>
+          <div id="highlight-text-preview" style="font-style:italic;color:#555;"></div>
+        </div>
+        <button onclick="clearHighlight()" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;flex-shrink:0;">✕</button>
+      </div>
+      <div class="comment-form">
+        <input class="name-input" id="commenter-name" placeholder="Your name" />
+        <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed, e.g. 'Can we update the headline to be more urgent?'"></textarea>
+        <div>
+          <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Attach image
+          </button>
+          <input type="file" id="image-upload" accept="image/*" style="display:none;" onchange="handleImageAttach(event)" />
+          <div id="image-preview-container" style="margin-top:8px;display:none;">
+            <div class="image-preview-wrap">
+              <img id="image-preview" class="image-preview" />
+              <button class="remove-image" onclick="removeImage()">✕</button>
+            </div>
+            <div style="font-size:11px;color:#888;margin-top:4px;" id="image-size-label"></div>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="submitComment()" style="width:100%;">Submit feedback</button>
+      </div>
+      <div style="padding:0.75rem 1.5rem;border-bottom:0.5px solid rgba(0,0,0,0.15);font-size:12px;font-weight:500;color:#888;">Submitted feedback</div>
+      <div class="client-comments-list" id="client-comments-list">
+        <div style="color:#888;font-size:13px;">No comments yet.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="attachment" />
+</div>
+
+<div class="modal-overlay" id="edit-modal" onclick="closeEditModal(event)">
+  <div class="modal">
+    <div class="modal-title">Edit campaign</div>
+    <div class="modal-field">
+      <div class="modal-label">Campaign name</div>
+      <input class="modal-input" id="edit-camp-name" placeholder="e.g. June Newsletter" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Client name</div>
+      <input class="modal-input" id="edit-client-name" placeholder="e.g. Acme Corp" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="success-toast" id="toast"></div>
+
+<script>
+const state = { campaigns: [], comments: [], activeCampaignId: null, attachedImage: null, editingId: null };
+
+const DEMO_HTML = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:Georgia,serif;margin:0;padding:0;background:#f5f5f3;">
+<div style="max-width:600px;margin:0 auto;padding:40px 32px;background:#fff;">
+  <div style="text-align:center;margin-bottom:32px;">
+    <div style="font-size:13px;letter-spacing:0.08em;color:#888;text-transform:uppercase;margin-bottom:12px;">June Newsletter</div>
+    <h1 style="font-size:32px;font-weight:400;line-height:1.2;color:#1a1a18;margin:0 0 16px;">Summer is here — and so are our best offers</h1>
+    <p style="font-size:15px;line-height:1.7;color:#555;margin:0 0 28px;">We've been working hard behind the scenes to bring you something special this month. Here's what's new.</p>
+    <a href="#" style="display:inline-block;background:#1D9E75;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;">Shop the summer sale</a>
+  </div>
+  <hr style="border:none;border-top:1px solid #eee;margin:32px 0;" />
+  <div style="background:#E1F5EE;border-radius:8px;padding:24px;margin-bottom:16px;">
+    <div style="font-size:12px;letter-spacing:0.06em;color:#0F6E56;text-transform:uppercase;margin-bottom:8px;">Featured</div>
+    <div style="font-size:20px;font-weight:500;margin-bottom:8px;color:#1a1a18;">New product launch</div>
+    <div style="font-size:14px;line-height:1.6;color:#555;">Our most-requested product is finally here. Limited stock — get yours before it sells out.</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:32px;">
+    <div style="background:#f5f5f3;border-radius:8px;padding:20px;">
+      <div style="font-size:18px;margin-bottom:6px;">📦</div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:4px;">Free shipping</div>
+      <div style="font-size:13px;color:#888;">On all orders over $75 this month only.</div>
+    </div>
+    <div style="background:#f5f5f3;border-radius:8px;padding:20px;">
+      <div style="font-size:18px;margin-bottom:6px;">🎁</div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:4px;">Gift with purchase</div>
+      <div style="font-size:13px;color:#888;">Spend $150+ and get a free gift.</div>
+    </div>
+  </div>
+  <hr style="border:none;border-top:1px solid #eee;margin:32px 0;" />
+  <div style="text-align:center;font-size:12px;color:#aaa;line-height:1.8;">
+    You're receiving this because you opted in at checkout.<br>
+    <a href="#" style="color:#888;">Unsubscribe</a> · <a href="#" style="color:#888;">View in browser</a>
+  </div>
+</div>
+</body></html>`;
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+function timeAgo(ts) {
+  const diff = (Date.now() - ts) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+function escapeAttr(str) {
+  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function switchView(v, btn) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + v).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (v === 'dashboard') renderDashboard();
+  if (v === 'client') renderClientView();
+}
+
+function loadDemo() {
+  document.getElementById('email-html').value = DEMO_HTML;
+  document.getElementById('camp-name').value = 'June Newsletter';
+  document.getElementById('client-name').value = 'Acme Corp';
+}
+
+function createCampaign() {
+  const html = document.getElementById('email-html').value.trim();
+  const name = document.getElementById('camp-name').value.trim() || 'Untitled';
+  const client = document.getElementById('client-name').value.trim() || 'Client';
+  if (!html) { showToast('Paste some email HTML first'); return; }
+  const id = uid();
+  state.campaigns.push({ id, name, client, html, created: Date.now() });
+  state.activeCampaignId = id;
+  document.getElementById('generated-link').textContent = 'Ready — click "Client Preview" tab to simulate client view';
+  document.getElementById('link-result').style.display = 'block';
+  renderCampaignList();
+  showToast('Campaign created! Go to Client Preview to test.');
+}
+
+function copyLink() {
+  showToast('Deploy to Vercel to get a real shareable link!');
+}
+
+function renderCampaignList() {
+  const el = document.getElementById('campaigns-list');
+  if (!state.campaigns.length) {
+    el.innerHTML = '<div class="empty-state">No campaigns yet. Create one above.</div>';
+    return;
+  }
+  el.innerHTML = state.campaigns.slice().reverse().map(c => {
+    const comments = state.comments.filter(x => x.campaignId === c.id);
+    const open = comments.filter(x => !x.resolved).length;
+    return `<div class="campaign-row" onclick="openCampaignDashboard('${c.id}')">
+      <div class="campaign-info">
+        <div class="campaign-name">${c.name}</div>
+        <div class="campaign-meta">${c.client} · ${timeAgo(c.created)}</div>
+      </div>
+      ${comments.length
+        ? `<div class="comment-badge ${open > 0 ? 'unread' : ''}">${open > 0 ? open + ' open' : comments.length + ' resolved'}</div>`
+        : '<div style="font-size:12px;color:#888;">No comments</div>'}
+    </div>`;
+  }).join('');
+}
+
+function openCampaignDashboard(id) {
+  state.activeCampaignId = id;
+  switchView('dashboard', document.querySelectorAll('.nav-btn')[1]);
+}
+
+function renderDashboard() {
+  renderCampSidebar();
+  if (state.activeCampaignId) {
+    renderDashPreview();
+  }
+}
+
+function renderCampSidebar() {
+  const el = document.getElementById('camp-sidebar-list');
+  const countEl = document.getElementById('sidebar-camp-count');
+  if (!state.campaigns.length) {
+    el.innerHTML = '<div style="padding:2rem;text-align:center;font-size:13px;color:#888;">No campaigns yet.</div>';
+    countEl.textContent = '';
+    return;
+  }
+
+  // Sort: campaigns with open comments first, then by created date
+  const sorted = [...state.campaigns].sort((a, b) => {
+    const aOpen = state.comments.filter(c => c.campaignId === a.id && !c.resolved).length;
+    const bOpen = state.comments.filter(c => c.campaignId === b.id && !c.resolved).length;
+    if (bOpen !== aOpen) return bOpen - aOpen;
+    return b.created - a.created;
+  });
+
+  countEl.textContent = state.campaigns.length + ' total';
+
+  el.innerHTML = sorted.map(c => {
+    const comments = state.comments.filter(x => x.campaignId === c.id);
+    const open = comments.filter(x => !x.resolved).length;
+    const initials = c.client.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const isActive = c.id === state.activeCampaignId;
+    return `<div class="camp-sidebar-item ${isActive ? 'active' : ''}" onclick="selectCampaign('${c.id}')">
+      <div class="camp-sidebar-avatar">${initials}</div>
+      <div class="camp-sidebar-info">
+        <div class="camp-sidebar-name">${c.name}</div>
+        <div class="camp-sidebar-meta">${c.client} · ${timeAgo(c.created)}</div>
+      </div>
+      ${open > 0
+        ? `<div class="notif-badge">${open}</div>`
+        : comments.length > 0
+          ? `<div class="notif-badge resolved-all">✓</div>`
+          : ''}
+      <button class="edit-icon" onclick="openEditModal(event,'${c.id}')" title="Edit campaign">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function selectCampaign(id) {
+  state.activeCampaignId = id;
+  renderCampSidebar();
+  renderDashPreview();
+  renderDashComments();
+}
+
+function renderDashPreview() {
+  const area = document.getElementById('dash-preview');
+  const label = document.getElementById('dash-campaign-label');
+  const stats = document.getElementById('dash-stats');
+  const camp = state.campaigns.find(c => c.id === state.activeCampaignId);
+  if (!camp) {
+    area.innerHTML = '<div style="color:#888;font-size:14px;">Select a campaign from the sidebar</div>';
+    label.textContent = 'Select a campaign';
+    stats.textContent = '';
+    return;
+  }
+  const comments = state.comments.filter(c => c.campaignId === camp.id);
+  const pinnedComments = comments.filter(c => c.pin);
+  const open = comments.filter(c => !c.resolved).length;
+  label.textContent = camp.name + ' — ' + camp.client;
+  stats.textContent = open + ' open · ' + (comments.length - open) + ' resolved';
+
+  area.innerHTML = `<div class="email-frame-wrap" style="width:620px;">
+    <div class="email-frame-header">
+      <div class="dot" style="background:#f09595;"></div>
+      <div class="dot" style="background:#fac775;"></div>
+      <div class="dot" style="background:#97c459;"></div>
+      <span style="font-size:12px;color:#888;margin-left:8px;">${camp.name}</span>
+    </div>
+    <div style="position:relative;" id="dash-pin-container">
+      <iframe id="dash-email-iframe" style="width:100%;border:none;min-height:400px;display:block;" srcdoc="${escapeAttr(camp.html)}" sandbox="allow-same-origin allow-popups"></iframe>
+      <div id="dash-pins-layer" style="position:absolute;top:0;left:0;width:100%;pointer-events:none;z-index:11;"></div>
+    </div>
+  </div>`;
+
+  // Wait for iframe to load then place pins at correct positions
+  const iframe = document.getElementById('dash-email-iframe');
+  if (iframe) {
+    iframe.onload = () => {
+      try {
+        const h = iframe.contentDocument.body.scrollHeight;
+        const fullHeight = h + 40;
+        iframe.style.height = fullHeight + 'px';
+
+        // Now render pins using actual height
+        const pinsLayer = document.getElementById('dash-pins-layer');
+        if (pinsLayer) {
+          pinsLayer.style.height = fullHeight + 'px';
+          pinsLayer.innerHTML = pinnedComments.map((c, i) =>
+            `<div class="pin pin-placed" style="left:${c.pin.x}%;top:${c.pin.y}%;pointer-events:auto;cursor:pointer;position:absolute;" title="${c.author}: ${c.text}" onclick="highlightDashComment('${c.id}')">${i + 1}</div>`
+          ).join('');
+        }
+      } catch(e) {}
+    };
+  }
+}
+
+function highlightDashComment(id) {
+  const panel = document.getElementById('dash-comments-panel');
+  panel.style.display = 'block';
+  // Highlight the matching comment row
+  document.querySelectorAll('.dash-comment-row').forEach(el => el.style.background = '');
+  const target = document.getElementById('dash-comment-' + id);
+  if (target) {
+    target.style.background = '#f0fdf6';
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function renderDashComments() {
+  const panel = document.getElementById('dash-comments-panel');
+  const comments = state.comments.filter(c => c.campaignId === state.activeCampaignId);
+  if (!comments.length) {
+    panel.style.display = 'none';
+    return;
+  }
+  const pinnedComments = comments.filter(c => c.pin);
+  panel.style.display = 'block';
+  panel.innerHTML = `<div style="padding:10px 16px 6px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Feedback (${comments.length})</div>` +
+    comments.slice().reverse().map(c => {
+      const pinNum = c.pin ? pinnedComments.indexOf(c) + 1 : null;
+      return `<div class="comment-item dash-comment-row ${c.resolved ? 'resolved' : ''}" id="dash-comment-${c.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px;">
+            ${pinNum ? `<span class="pin-ref">${pinNum}</span>` : ''}
+            ${c.author}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="comment-status ${c.resolved ? 'resolved' : 'open'}">${c.resolved ? 'resolved' : 'open'}</span>
+            <button class="resolve-btn ${c.resolved ? 'undo' : ''}" onclick="toggleResolve('${c.id}')">${c.resolved ? 'Reopen' : 'Resolve'}</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#555;margin-top:3px;">${c.text || ''}</div>
+        ${c.highlight ? `<div style="font-size:11px;background:#fffbea;border-left:3px solid #f59e0b;padding:4px 8px;border-radius:0 4px 4px 0;margin:4px 0;color:#92400e;font-style:italic;">"${c.highlight}"</div>` : ''}
+        ${c.image ? `<img src="${c.image}" class="detail-image" onclick="openLightbox('${c.image}')" title="Click to enlarge" style="max-height:80px;" />` : ''}
+        <div style="font-size:11px;color:#aaa;margin-top:4px;">${timeAgo(c.created)}</div>
+      </div>`;
+    }).join('');
+}
+
+function toggleResolve(id) {
+  const c = state.comments.find(x => x.id === id);
+  if (c) {
+    c.resolved = !c.resolved;
+    renderDashComments();
+    renderCampSidebar();
+    renderCampaignList();
+  }
+}
+
+function renderClientView() {
+  const camp = state.activeCampaignId
+    ? state.campaigns.find(c => c.id === state.activeCampaignId)
+    : state.campaigns[state.campaigns.length - 1];
+  if (!camp) {
+    document.getElementById('client-camp-title').textContent = 'No email loaded — go to Agency tab first';
+    return;
+  }
+  document.getElementById('client-subject').textContent = camp.name;
+  document.getElementById('client-camp-title').textContent = camp.name + ' — ' + camp.client;
+
+  const iframe = document.getElementById('client-email-iframe');
+  iframe.srcdoc = camp.html;
+  iframe.onload = () => {
+    try {
+      const h = iframe.contentDocument.body.scrollHeight;
+      iframe.style.height = (h + 40) + 'px';
+      // Listen for text selection inside iframe
+      iframe.contentDocument.addEventListener('mouseup', handleTextSelection);
+    } catch(e) {}
+  };
+  renderClientComments(camp.id);
+}
+
+function renderClientComments(campId) {
+  const el = document.getElementById('client-comments-list');
+  const comments = state.comments.filter(c => c.campaignId === campId);
+  if (!comments.length) {
+    el.innerHTML = '<div style="color:#888;font-size:13px;">No comments yet.</div>';
+    return;
+  }
+  const pinnedComments = comments.filter(x => x.pin);
+  el.innerHTML = comments.slice().reverse().map(c => {
+    const pinNum = c.pin ? pinnedComments.indexOf(c) + 1 : null;
+    return `<div class="client-comment-card">
+      <div class="client-comment-name" style="display:flex;align-items:center;gap:6px;">
+        ${pinNum ? `<span class="pin-ref">${pinNum}</span>` : ''}
+        ${c.author}
+        <button onclick="deleteComment('${c.id}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;line-height:1;padding:0 2px;" title="Delete comment">✕</button>
+      </div>
+      ${c.highlight ? `<div style="font-size:11px;background:#fffbea;border-left:3px solid #f59e0b;padding:4px 8px;border-radius:0 4px 4px 0;margin:4px 0;color:#92400e;font-style:italic;">"${c.highlight}"</div>` : ''}
+      <div class="client-comment-body">${c.text}</div>
+      ${c.image ? `<img src="${c.image}" class="comment-image" onclick="openLightbox('${c.image}')" title="Click to enlarge" />` : ''}
+      <div class="client-comment-time">${timeAgo(c.created)}</div>
+    </div>`;
+  }).join('');
+}
+
+function handleImageAttach(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 3 * 1024 * 1024) { showToast('Image too large — max 3MB'); e.target.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    state.attachedImage = ev.target.result;
+    document.getElementById('image-preview').src = ev.target.result;
+    document.getElementById('image-preview-container').style.display = 'block';
+    document.getElementById('image-size-label').textContent = (file.size / 1024).toFixed(0) + 'KB · ' + file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeImage() {
+  state.attachedImage = null;
+  document.getElementById('image-preview-container').style.display = 'none';
+  document.getElementById('image-upload').value = '';
+}
+
+function openEditModal(e, id) {
+  e.stopPropagation();
+  const camp = state.campaigns.find(c => c.id === id);
+  if (!camp) return;
+  state.editingId = id;
+  document.getElementById('edit-camp-name').value = camp.name;
+  document.getElementById('edit-client-name').value = camp.client;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal(e) {
+  if (e && e.target !== document.getElementById('edit-modal')) return;
+  document.getElementById('edit-modal').classList.remove('open');
+  state.editingId = null;
+}
+
+function saveEdit() {
+  const camp = state.campaigns.find(c => c.id === state.editingId);
+  if (!camp) return;
+  camp.name = document.getElementById('edit-camp-name').value.trim() || camp.name;
+  camp.client = document.getElementById('edit-client-name').value.trim() || camp.client;
+  document.getElementById('edit-modal').classList.remove('open');
+  state.editingId = null;
+  renderCampSidebar();
+  renderCampaignList();
+  if (state.activeCampaignId === camp.id) renderDashPreview();
+  showToast('Campaign updated!');
+}
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+// ─── HIGHLIGHT SYSTEM ────────────────────────────────────────────────────────
+let selectedHighlight = null;
+
+function handleTextSelection() {
+  const iframe = document.getElementById('client-email-iframe');
+  try {
+    const selection = iframe.contentDocument.getSelection();
+    const text = selection ? selection.toString().trim() : '';
+    if (text.length > 0) {
+      selectedHighlight = text;
+      const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+      document.getElementById('highlight-text-preview').textContent = '"' + preview + '"';
+      document.getElementById('highlight-indicator').style.display = 'flex';
+    }
+  } catch(e) {}
+}
+
+function clearHighlight() {
+  selectedHighlight = null;
+  document.getElementById('highlight-indicator').style.display = 'none';
+  // Clear iframe selection
+  try {
+    const iframe = document.getElementById('client-email-iframe');
+    iframe.contentDocument.getSelection().removeAllRanges();
+  } catch(e) {}
+}
+
+function deleteComment(id) {
+  const idx = state.comments.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  const campId = state.comments[idx].campaignId;
+  state.comments.splice(idx, 1);
+  renderClientComments(campId);
+  renderCampaignList();
+  renderDashComments();
+  renderCampSidebar();
+  showToast('Comment deleted');
+}
+
+function submitComment() {
+  const author = document.getElementById('commenter-name').value.trim() || 'Client';
+  const text = document.getElementById('comment-body').value.trim();
+  const camp = state.activeCampaignId
+    ? state.campaigns.find(c => c.id === state.activeCampaignId)
+    : state.campaigns[state.campaigns.length - 1];
+  if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
+  if (!camp) { showToast('No email loaded — go to Agency tab first'); return; }
+  state.comments.push({ id: uid(), campaignId: camp.id, author, text, image: state.attachedImage, highlight: selectedHighlight, created: Date.now(), resolved: false });
+  document.getElementById('comment-body').value = '';
+  removeImage();
+  clearHighlight();
+  renderClientComments(camp.id);
+  renderCampaignList();
+  renderDashComments();
+  renderCampSidebar();
+  showToast('Feedback submitted!');
+}
+
+renderCampaignList();
+</script>
+</body>
+</html>
