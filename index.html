@@ -69,6 +69,9 @@
   .comment-status { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; font-weight: 500; }
   .comment-status.open { background: #faeeda; color: #854F0B; }
   .comment-status.resolved { background: #e8faf1; color: #0d7a4e; }
+  .dashboard-view { flex-direction: row; }
+  .sidebar { width: 280px; min-width: 280px; background: #fff; border-right: 0.5px solid rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar-header { padding: 1rem 1.25rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
   .main-dashboard { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
   .preview-area { flex: 1; overflow-y: auto; background: #f5f5f3; padding: 1.5rem; display: flex; justify-content: center; }
   .email-frame-wrap { background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 12px; width: 620px; min-height: 200px; overflow: hidden; }
@@ -731,25 +734,36 @@ function setupHighlightListener() {
     const frameWindow = iframe.contentWindow;
     const frameDoc = frameWindow && frameWindow.document;
     if (!frameDoc) return;
-    frameDoc.addEventListener('mouseup', captureSelection);
-    frameDoc.addEventListener('keyup', captureSelection);
+
+    // Listen inside iframe
+    frameDoc.addEventListener('mouseup', () => setTimeout(captureSelection, 50));
+    frameDoc.addEventListener('keyup', () => setTimeout(captureSelection, 50));
+
+    // Also listen on parent document in case mouseup fires there
+    document.addEventListener('mouseup', () => setTimeout(captureSelection, 50));
   } catch(e) { console.warn('highlight listener failed:', e); }
 }
 
 function captureSelection() {
   const iframe = document.getElementById('client-email-iframe');
+  if (!iframe) return;
   try {
     const frameWindow = iframe.contentWindow;
     const frameDoc = frameWindow && frameWindow.document;
     if (!frameDoc) return;
+
     let text = '';
-    if (frameDoc.getSelection) {
-      text = String(frameDoc.getSelection()).trim();
-    } else if (frameWindow.getSelection) {
+    // Try all three methods
+    if (frameWindow.getSelection) {
       text = String(frameWindow.getSelection()).trim();
-    } else if (frameDoc.selection) {
+    }
+    if (!text && frameDoc.getSelection) {
+      text = String(frameDoc.getSelection()).trim();
+    }
+    if (!text && frameDoc.selection) {
       text = frameDoc.selection.createRange().text.trim();
     }
+
     if (text.length > 0) {
       selectedHighlight = text;
       const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
