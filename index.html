@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Email Connect — N2 Digital</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f3; color: #1a1a18; min-height: 100vh; }
@@ -163,7 +164,7 @@
         <div class="field-label" style="margin-bottom:6px;">Paste email HTML from GHL</div>
         <textarea class="email-input-area" id="email-html" placeholder="Paste your full email HTML here. Start from <!DOCTYPE html> or <html>."></textarea>
         <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
-          <button class="btn-primary" onclick="createCampaign()">Generate review link</button>
+          <button class="btn-primary" id="generate-btn" onclick="createCampaign()">Generate review link</button>
           <button class="btn-secondary" onclick="loadDemo()">Load demo email</button>
         </div>
         <div id="link-result" style="display:none;">
@@ -240,7 +241,8 @@
       </div>
       <div class="comment-form">
         <input class="name-input" id="commenter-name" placeholder="Your name" />
-        <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed, e.g. 'Can we update the headline to be more urgent?'"></textarea>
+        <input class="name-input" id="referring-to" placeholder="Referring to... (e.g. 'the headline' or 'blue button')" style="font-style:italic;" />
+        <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed..."></textarea>
         <div>
           <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -291,6 +293,11 @@
 <div class="success-toast" id="toast"></div>
 
 <script>
+// ─── SUPABASE ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://smfqjvuqcbjhepwpnvpb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NVQN06tVARKRys7Oq1ENqw_BKHd3rUt';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const state = { campaigns: [], comments: [], activeCampaignId: null, attachedImage: null, editingId: null };
 
 const DEMO_HTML = `<!DOCTYPE html>
@@ -363,22 +370,50 @@ function loadDemo() {
   document.getElementById('client-name').value = 'Acme Corp';
 }
 
-function createCampaign() {
+async function createCampaign() {
   const html = document.getElementById('email-html').value.trim();
   const name = document.getElementById('camp-name').value.trim() || 'Untitled';
   const client = document.getElementById('client-name').value.trim() || 'Client';
   if (!html) { showToast('Paste some email HTML first'); return; }
-  const id = uid();
-  state.campaigns.push({ id, name, client, html, created: Date.now() });
-  state.activeCampaignId = id;
-  document.getElementById('generated-link').textContent = 'Ready — click "Client Preview" tab to simulate client view';
+
+  const btn = document.getElementById('generate-btn');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  const { data, error } = await db.from('campaigns')
+    .insert({ name, client, html, created_at: new Date().toISOString() })
+    .select().single();
+
+  btn.textContent = 'Generate review link';
+  btn.disabled = false;
+
+  if (error) {
+    console.error(error);
+    // Fallback to in-memory if Supabase fails
+    const id = uid();
+    state.campaigns.push({ id, name, client, html, created: Date.now() });
+    state.activeCampaignId = id;
+    const link = window.location.origin + window.location.pathname + '?review=' + id;
+    document.getElementById('generated-link').textContent = link;
+    document.getElementById('link-result').style.display = 'block';
+    renderCampaignList();
+    showToast('Saved locally — Supabase unavailable');
+    return;
+  }
+
+  state.campaigns.unshift({ ...data, created: new Date(data.created_at).getTime() });
+  state.activeCampaignId = data.id;
+  const link = window.location.origin + window.location.pathname + '?review=' + data.id;
+  document.getElementById('generated-link').textContent = link;
   document.getElementById('link-result').style.display = 'block';
   renderCampaignList();
-  showToast('Campaign created! Go to Client Preview to test.');
+  showToast('Review link created!');
 }
 
 function copyLink() {
-  showToast('Deploy to Vercel to get a real shareable link!');
+  const txt = document.getElementById('generated-link').textContent;
+  navigator.clipboard.writeText(txt).catch(() => {});
+  showToast('Link copied!');
 }
 
 function renderCampaignList() {
@@ -585,9 +620,8 @@ function renderClientView() {
     try {
       const h = iframe.contentDocument.body.scrollHeight;
       iframe.style.height = (h + 40) + 'px';
-      // Listen for text selection inside iframe
-      iframe.contentDocument.addEventListener('mouseup', handleTextSelection);
     } catch(e) {}
+    setupHighlightListener();
   };
   renderClientComments(camp.id);
 }
@@ -677,11 +711,32 @@ function closeLightbox() {
 // ─── HIGHLIGHT SYSTEM ────────────────────────────────────────────────────────
 let selectedHighlight = null;
 
-function handleTextSelection() {
+function setupHighlightListener() {
+  const iframe = document.getElementById('client-email-iframe');
+  if (!iframe) return;
+  try {
+    const frameWindow = iframe.contentWindow;
+    const frameDoc = frameWindow && frameWindow.document;
+    if (!frameDoc) return;
+    frameDoc.addEventListener('mouseup', captureSelection);
+    frameDoc.addEventListener('keyup', captureSelection);
+  } catch(e) { console.warn('highlight listener failed:', e); }
+}
+
+function captureSelection() {
   const iframe = document.getElementById('client-email-iframe');
   try {
-    const selection = iframe.contentDocument.getSelection();
-    const text = selection ? selection.toString().trim() : '';
+    const frameWindow = iframe.contentWindow;
+    const frameDoc = frameWindow && frameWindow.document;
+    if (!frameDoc) return;
+    let text = '';
+    if (frameDoc.getSelection) {
+      text = String(frameDoc.getSelection()).trim();
+    } else if (frameWindow.getSelection) {
+      text = String(frameWindow.getSelection()).trim();
+    } else if (frameDoc.selection) {
+      text = frameDoc.selection.createRange().text.trim();
+    }
     if (text.length > 0) {
       selectedHighlight = text;
       const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
@@ -694,10 +749,10 @@ function handleTextSelection() {
 function clearHighlight() {
   selectedHighlight = null;
   document.getElementById('highlight-indicator').style.display = 'none';
-  // Clear iframe selection
   try {
     const iframe = document.getElementById('client-email-iframe');
-    iframe.contentDocument.getSelection().removeAllRanges();
+    const frameDoc = iframe.contentWindow && iframe.contentWindow.document;
+    if (frameDoc && frameDoc.getSelection) frameDoc.getSelection().removeAllRanges();
   } catch(e) {}
 }
 
@@ -713,16 +768,43 @@ function deleteComment(id) {
   showToast('Comment deleted');
 }
 
-function submitComment() {
+async function submitComment() {
   const author = document.getElementById('commenter-name').value.trim() || 'Client';
   const text = document.getElementById('comment-body').value.trim();
+  const referringTo = document.getElementById('referring-to').value.trim();
   const camp = state.activeCampaignId
     ? state.campaigns.find(c => c.id === state.activeCampaignId)
     : state.campaigns[state.campaigns.length - 1];
   if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
-  if (!camp) { showToast('No email loaded — go to Agency tab first'); return; }
-  state.comments.push({ id: uid(), campaignId: camp.id, author, text, image: state.attachedImage, highlight: selectedHighlight, created: Date.now(), resolved: false });
+  if (!camp) { showToast('No email loaded'); return; }
+
+  const finalReference = referringTo || selectedHighlight || null;
+
+  const comment = {
+    campaign_id: camp.id,
+    author,
+    text,
+    referring_to: finalReference,
+    resolved: false,
+    created_at: new Date().toISOString()
+  };
+
+  const { data, error } = await db.from('comments').insert(comment).select().single();
+
+  const localComment = {
+    id: data ? data.id : uid(),
+    campaignId: camp.id,
+    author, text,
+    referringTo: finalReference,
+    image: state.attachedImage,
+    highlight: finalReference,
+    created: Date.now(),
+    resolved: false
+  };
+
+  state.comments.unshift(localComment);
   document.getElementById('comment-body').value = '';
+  document.getElementById('referring-to').value = '';
   removeImage();
   clearHighlight();
   renderClientComments(camp.id);
@@ -732,7 +814,27 @@ function submitComment() {
   showToast('Feedback submitted!');
 }
 
-renderCampaignList();
+async function init() {
+  try {
+    const [{ data: campaigns }, { data: comments }] = await Promise.all([
+      db.from('campaigns').select('*').order('created_at', { ascending: false }),
+      db.from('comments').select('*').order('created_at', { ascending: false })
+    ]);
+    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, created: new Date(c.created_at).getTime() }));
+    if (comments) state.comments = comments.map(c => ({ ...c, campaignId: c.campaign_id, referringTo: c.referring_to, highlight: c.referring_to, created: new Date(c.created_at).getTime() }));
+  } catch(e) { console.warn('Supabase load failed, using local state'); }
+
+  renderCampaignList();
+
+  const params = new URLSearchParams(window.location.search);
+  const reviewId = params.get('review');
+  if (reviewId) {
+    state.activeCampaignId = reviewId;
+    switchView('client', document.querySelectorAll('.nav-btn')[2]);
+  }
+}
+
+init();
 </script>
 </body>
 </html>
