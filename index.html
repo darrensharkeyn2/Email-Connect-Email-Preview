@@ -400,8 +400,8 @@ async function createCampaign() {
     return;
   }
 
-  state.campaigns.unshift({ ...data, created: new Date(data.created_at).getTime() });
-  state.activeCampaignId = data.id;
+  state.campaigns.unshift({ ...data, id: String(data.id), created: new Date(data.created_at).getTime() });
+  state.activeCampaignId = String(data.id);
   const link = window.location.origin + window.location.pathname + '?review=' + data.id;
   document.getElementById('generated-link').textContent = link;
   document.getElementById('link-result').style.display = 'block';
@@ -422,7 +422,7 @@ function renderCampaignList() {
     return;
   }
   el.innerHTML = state.campaigns.slice().reverse().map(c => {
-    const comments = state.comments.filter(x => x.campaignId === c.id);
+    const comments = state.comments.filter(x => String(x.campaignId) === String(c.id));
     const open = comments.filter(x => !x.resolved).length;
     return `<div class="campaign-row" onclick="openCampaignDashboard('${c.id}')">
       <div class="campaign-info">
@@ -469,7 +469,7 @@ function renderCampSidebar() {
   countEl.textContent = state.campaigns.length + ' total';
 
   el.innerHTML = sorted.map(c => {
-    const comments = state.comments.filter(x => x.campaignId === c.id);
+    const comments = state.comments.filter(x => String(x.campaignId) === String(c.id));
     const open = comments.filter(x => !x.resolved).length;
     const initials = c.client.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     const isActive = c.id === state.activeCampaignId;
@@ -492,7 +492,7 @@ function renderCampSidebar() {
 }
 
 async function selectCampaign(id) {
-  state.activeCampaignId = id;
+  state.activeCampaignId = String(id);
   renderCampSidebar();
   renderDashPreview();
   try {
@@ -521,14 +521,14 @@ function renderDashPreview() {
   const area = document.getElementById('dash-preview');
   const label = document.getElementById('dash-campaign-label');
   const stats = document.getElementById('dash-stats');
-  const camp = state.campaigns.find(c => c.id === state.activeCampaignId);
+  const camp = state.campaigns.find(c => String(c.id) === String(state.activeCampaignId));
   if (!camp) {
     area.innerHTML = '<div style="color:#888;font-size:14px;">Select a campaign from the sidebar</div>';
     label.textContent = 'Select a campaign';
     stats.textContent = '';
     return;
   }
-  const comments = state.comments.filter(c => c.campaignId === camp.id);
+  const comments = state.comments.filter(c => String(c.campaignId) === String(camp.id));
   const pinnedComments = comments.filter(c => c.pin);
   const open = comments.filter(c => !c.resolved).length;
   label.textContent = camp.name + ' — ' + camp.client;
@@ -583,7 +583,7 @@ function highlightDashComment(id) {
 
 function renderDashComments() {
   const panel = document.getElementById('dash-comments-panel');
-  const comments = state.comments.filter(c => c.campaignId === state.activeCampaignId);
+  const comments = state.comments.filter(c => String(c.campaignId) === String(state.activeCampaignId));
   if (!comments.length) {
     panel.style.display = 'none';
     return;
@@ -624,7 +624,7 @@ function toggleResolve(id) {
 
 function renderClientView() {
   const camp = state.activeCampaignId
-    ? state.campaigns.find(c => c.id === state.activeCampaignId)
+    ? state.campaigns.find(c => String(c.id) === String(state.activeCampaignId))
     : state.campaigns[state.campaigns.length - 1];
   if (!camp) {
     document.getElementById('client-camp-title').textContent = 'No email loaded — go to Agency tab first';
@@ -798,7 +798,7 @@ async function submitComment() {
   const text = document.getElementById('comment-body').value.trim();
   const finalReference = selectedHighlight || null;
   const camp = state.activeCampaignId
-    ? state.campaigns.find(c => c.id === state.activeCampaignId)
+    ? state.campaigns.find(c => String(c.id) === String(state.activeCampaignId))
     : state.campaigns[state.campaigns.length - 1];
   if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
   if (!camp) { showToast('No email loaded'); return; }
@@ -846,10 +846,11 @@ async function init() {
       db.from('campaigns').select('*').order('created_at', { ascending: false }),
       db.from('Comments').select('*').order('created_at', { ascending: false })
     ]);
-    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, created: new Date(c.created_at).getTime() }));
+    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime() }));
     if (comments) state.comments = comments.map(c => ({
       ...c,
-      campaignId: c.campaign_id,
+      id: String(c.id),
+      campaignId: String(c.campaign_id),
       referringTo: c.referring_to,
       highlight: c.referring_to,
       created: new Date(c.created_at).getTime()
