@@ -445,6 +445,7 @@ function renderDashboard() {
   renderCampSidebar();
   if (state.activeCampaignId) {
     renderDashPreview();
+    renderDashComments();
   }
 }
 
@@ -494,24 +495,26 @@ async function selectCampaign(id) {
   state.activeCampaignId = id;
   renderCampSidebar();
   renderDashPreview();
-  // Refresh comments from Supabase for this campaign
   try {
     const { data } = await db.from('Comments')
       .select('*')
       .eq('campaign_id', id)
       .order('created_at', { ascending: false });
     if (data) {
-      // Merge in fresh comments for this campaign
-      state.comments = state.comments.filter(c => c.campaignId !== id);
-      state.comments.push(...data.map(c => ({
-        ...c,
-        campaignId: c.campaign_id,
-        highlight: c.referring_to,
-        created: new Date(c.created_at).getTime()
-      })));
+      // Only replace comments for this campaign, keep others
+      state.comments = [
+        ...state.comments.filter(c => c.campaignId !== id),
+        ...data.map(c => ({
+          ...c,
+          campaignId: c.campaign_id,
+          highlight: c.referring_to,
+          created: new Date(c.created_at).getTime()
+        }))
+      ];
     }
   } catch(e) {}
   renderDashComments();
+  renderCampSidebar();
 }
 
 function renderDashPreview() {
@@ -636,10 +639,12 @@ function renderClientView() {
     try {
       const h = iframe.contentDocument.body.scrollHeight;
       iframe.style.height = (h + 40) + 'px';
-      // Disable all link/button clicks so they don't navigate away
-      const style = iframe.contentDocument.createElement('style');
-      style.textContent = 'a, button, [href], input[type="submit"] { pointer-events: none !important; cursor: default !important; }';
-      iframe.contentDocument.head.appendChild(style);
+      // Block link navigation without disabling pointer events (which breaks text selection)
+      const doc = iframe.contentDocument;
+      doc.addEventListener('click', (e) => {
+        const link = e.target.closest('a, button');
+        if (link) e.preventDefault();
+      }, true);
     } catch(e) {}
     setupHighlightListener();
   };
