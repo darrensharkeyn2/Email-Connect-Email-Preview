@@ -235,7 +235,7 @@
             <button class="copy-btn" onclick="copyLink()">Copy</button>
           </div>
           <div style="font-size:12px; color:#888; margin-top:6px;">
-            💡 For this demo, use the <strong>Client Preview</strong> tab to simulate what your client sees.
+            💡 Share this link with your client — they'll see only the email preview and feedback form, with no access to the agency dashboard.
           </div>
         </div>
       </div>
@@ -281,7 +281,7 @@
             <div class="dot" style="background:#f09595;"></div>
             <div class="dot" style="background:#fac775;"></div>
             <div class="dot" style="background:#97c459;"></div>
-            <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject">Email Preview</span>
+            <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject"></span>
             <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
           </div>
           <div style="position:relative;" id="email-pin-container">
@@ -292,7 +292,7 @@
     </div>
     <div class="client-sidebar">
       <div class="client-sidebar-header">
-        <div class="client-sidebar-title" id="client-camp-title">Leave your feedback</div>
+        <div class="client-sidebar-title" id="client-camp-title"></div>
         <div class="client-sidebar-sub">Select text in the email to reference it, then leave your comment below</div>
       </div>
       <div id="highlight-indicator" style="display:none;padding:10px 1.5rem;background:#f0fdf6;border-bottom:0.5px solid #c6f6d5;font-size:12px;color:#0d7a4e;align-items:center;gap:8px;">
@@ -303,7 +303,7 @@
         <button onclick="clearHighlight()" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;flex-shrink:0;">✕</button>
       </div>
       <div class="comment-form">
-        <input class="name-input" id="commenter-name" placeholder="Your name" />
+        <input class="name-input" id="commenter-name" placeholder="" />
         <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed..."></textarea>
         <div>
           <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
