@@ -8,7 +8,7 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f3; color: #1a1a18; min-height: 100vh; }
-  .app { display: flex; flex-direction: column; min-height: 100vh; }
+  .app { display: none; flex-direction: column; min-height: 100vh; }
   .topbar { background: #0d0d1a; border-bottom: 0.5px solid rgba(255,255,255,0.1); padding: 0 1.5rem; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
   .topbar-logo { display: flex; align-items: center; gap: 10px; }
   .topbar-logo img { height: 28px; }
@@ -217,7 +217,7 @@
             <button class="copy-btn" onclick="copyLink()">Copy</button>
           </div>
           <div style="font-size:12px; color:#888; margin-top:6px;">
-            💡 For this demo, use the <strong>Client Preview</strong> tab to simulate what your client sees.
+            💡 Share this link with your client — they’ll see only the email preview and feedback form, with no access to the agency dashboard.
           </div>
         </div>
       </div>
@@ -243,6 +243,7 @@
       <div style="padding:1rem 1.5rem;border-bottom:0.5px solid rgba(0,0,0,0.15);background:#fff;display:flex;align-items:center;gap:12px;">
         <div id="dash-campaign-label" style="font-size:14px;font-weight:500;flex:1;">Select a campaign</div>
         <div id="dash-stats" style="font-size:12px;color:#888;"></div>
+        <button id="dash-copy-link-btn" onclick="copyActiveCampaignLink()" style="display:none;font-size:12px;color:#39e07a;background:transparent;border:0.5px solid #39e07a;padding:6px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;font-weight:500;">Copy Review Link</button>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div class="preview-area" id="dash-preview" style="flex:1;">
@@ -284,7 +285,7 @@
         <button onclick="clearHighlight()" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;flex-shrink:0;">✕</button>
       </div>
       <div class="comment-form">
-        <input class="name-input" id="commenter-name" placeholder="Your name" />
+        <input class="name-input" id="commenter-name" placeholder="Your name" id="commenter-name" />
         <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed..."></textarea>
         <div>
           <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
@@ -429,8 +430,9 @@ async function createCampaign() {
   btn.textContent = 'Saving...';
   btn.disabled = true;
 
+  const link = window.location.origin + window.location.pathname + '?review=PLACEHOLDER';
   const { data, error } = await db.from('campaigns')
-    .insert({ name, client, html, created_at: new Date().toISOString() })
+    .insert({ name, client, html, created_at: new Date().toISOString(), review_link: link })
     .select().single();
 
   btn.textContent = 'Generate review link';
@@ -450,10 +452,13 @@ async function createCampaign() {
     return;
   }
 
-  state.campaigns.unshift({ ...data, id: String(data.id), created: new Date(data.created_at).getTime() });
+  const realLink = window.location.origin + window.location.pathname + '?review=' + data.id;
+  // Update review_link now that we have the real ID
+  await db.from('campaigns').update({ review_link: realLink }).eq('id', data.id);
+  const campaign = { ...data, id: String(data.id), created: new Date(data.created_at).getTime(), review_link: realLink };
+  state.campaigns.unshift(campaign);
   state.activeCampaignId = String(data.id);
-  const link = window.location.origin + window.location.pathname + '?review=' + data.id;
-  document.getElementById('generated-link').textContent = link;
+  document.getElementById('generated-link').textContent = realLink;
   document.getElementById('link-result').style.display = 'block';
   renderCampaignList();
   showToast('Review link created!');
@@ -462,6 +467,20 @@ async function createCampaign() {
 function copyLink() {
   const txt = document.getElementById('generated-link').textContent;
   navigator.clipboard.writeText(txt).catch(() => {});
+  showToast('Link copied!');
+}
+
+function copyLinkById(id) {
+  const camp = state.campaigns.find(c => String(c.id) === String(id));
+  if (!camp || !camp.review_link) { showToast('No link saved for this campaign'); return; }
+  navigator.clipboard.writeText(camp.review_link).catch(() => {});
+  showToast('Link copied!');
+}
+
+function copyActiveCampaignLink() {
+  const camp = state.campaigns.find(c => String(c.id) === String(state.activeCampaignId));
+  if (!camp || !camp.review_link) { showToast('No link saved for this campaign'); return; }
+  navigator.clipboard.writeText(camp.review_link).catch(() => {});
   showToast('Link copied!');
 }
 
@@ -482,6 +501,7 @@ function renderCampaignList() {
       ${comments.length
         ? `<div class="comment-badge ${open > 0 ? 'unread' : ''}">${open > 0 ? open + ' open' : comments.length + ' resolved'}</div>`
         : '<div style="font-size:12px;color:#888;">No comments</div>'}
+      ${c.review_link ? `<button onclick="event.stopPropagation();copyLinkById('${c.id}')" style="font-size:11px;color:#39e07a;background:transparent;border:0.5px solid #39e07a;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0;">Copy link</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -582,6 +602,8 @@ function renderDashPreview() {
   const open = comments.filter(c => !c.resolved).length;
   label.textContent = camp.name + ' — ' + camp.client;
   stats.textContent = open + ' open · ' + (comments.length - open) + ' resolved';
+  const copyBtn = document.getElementById('dash-copy-link-btn');
+  if (copyBtn) copyBtn.style.display = camp.review_link ? 'block' : 'none';
 
   area.innerHTML = `<div class="email-frame-wrap" style="width:100%;max-width:680px;">
     <div class="email-frame-header">
@@ -816,9 +838,7 @@ async function deleteComment(id) {
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
-  try {
-    await db.from('Comments').delete().eq('id', id);
-  } catch(e) { console.warn('Delete from Supabase failed:', e); }
+  try { await db.from('Comments').delete().eq('id', id); } catch(e) {}
   showToast('Comment deleted');
 }
 
@@ -866,92 +886,100 @@ async function submitComment() {
 }
 
 async function init() {
-  // Check for review link first
   const params = new URLSearchParams(window.location.search);
   const reviewId = params.get('review');
 
+  // If client review link: hide topbar immediately before anything loads
+  if (reviewId) {
+    document.querySelector('.topbar').style.display = 'none';
+  }
+
+  // Show app now that we've decided layout — prevents agency flash on client links
+  document.querySelector('.app').style.display = 'flex';
+
   try {
-    const [{ data: campaigns }, { data: comments }] = await Promise.all([
-      db.from('campaigns').select('*').order('created_at', { ascending: false }),
-      db.from('Comments').select('*').order('created_at', { ascending: false })
-    ]);
-    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime() }));
-    if (comments) state.comments = comments.map(c => ({
-      ...c,
-      id: String(c.id),
-      campaignId: String(c.campaign_id),
-      referringTo: c.referring_to,
-      highlight: c.referring_to,
-      created: new Date(c.created_at).getTime()
-    }));
+    if (reviewId) {
+      // Client mode: only load the one campaign we need + its comments
+      const [{ data: campData }, { data: comments }] = await Promise.all([
+        db.from('campaigns').select('*').eq('id', reviewId).single(),
+        db.from('Comments').select('*').eq('campaign_id', reviewId).order('created_at', { ascending: false })
+      ]);
+      if (campData) state.campaigns = [{ ...campData, id: String(campData.id), created: new Date(campData.created_at).getTime() }];
+      if (comments) state.comments = comments.map(c => ({
+        ...c, id: String(c.id), campaignId: String(c.campaign_id),
+        referringTo: c.referring_to, highlight: c.referring_to,
+        created: new Date(c.created_at).getTime()
+      }));
+    } else {
+      // Agency mode: load everything
+      const [{ data: campaigns }, { data: comments }] = await Promise.all([
+        db.from('campaigns').select('*').order('created_at', { ascending: false }),
+        db.from('Comments').select('*').order('created_at', { ascending: false })
+      ]);
+      if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime(), review_link: c.review_link || null }));
+      if (comments) state.comments = comments.map(c => ({
+        ...c, id: String(c.id), campaignId: String(c.campaign_id),
+        referringTo: c.referring_to, highlight: c.referring_to,
+        created: new Date(c.created_at).getTime()
+      }));
+    }
   } catch(e) { console.warn('Supabase load failed:', e); }
 
-  // If review link, go straight to client view — hide entire topbar
   if (reviewId) {
     state.activeCampaignId = reviewId;
-    document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-    const clientView = document.getElementById('view-client');
-    clientView.classList.add('active');
+    document.getElementById('view-client').classList.add('active');
+
+    // Set name placeholder to client name
+    const camp = state.campaigns.find(c => String(c.id) === String(reviewId));
+    if (camp) {
+      const nameInput = document.getElementById('commenter-name');
+      if (nameInput) nameInput.placeholder = 'Your name (' + camp.client + ')';
+    }
+
     renderClientView();
 
-    // Real-time: new comments from other clients appear instantly
-    db.channel('client-comments-' + reviewId)
+    // Real-time for client: new comments appear instantly
+    db.channel('client-' + reviewId)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
         const c = payload.new;
-        const already = state.comments.find(x => String(x.id) === String(c.id));
-        if (!already) {
-          state.comments.unshift({
-            ...c,
-            id: String(c.id),
-            campaignId: String(c.campaign_id),
-            highlight: c.referring_to,
-            created: new Date(c.created_at).getTime()
-          });
-          renderClientComments(reviewId);
-        }
+        if (state.comments.find(x => String(x.id) === String(c.id))) return;
+        state.comments.unshift({
+          ...c, id: String(c.id), campaignId: String(c.campaign_id),
+          highlight: c.referring_to, created: new Date(c.created_at).getTime()
+        });
+        renderClientComments(reviewId);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
-        const deletedId = String(payload.old.id);
-        const idx = state.comments.findIndex(c => String(c.id) === deletedId);
-        if (idx !== -1) {
-          const campId = state.comments[idx].campaignId;
-          state.comments.splice(idx, 1);
-          renderClientComments(campId);
-        }
+        const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
+        if (idx !== -1) { state.comments.splice(idx, 1); renderClientComments(reviewId); }
       })
       .subscribe();
 
   } else {
     renderCampaignList();
 
-    // Restore last active tab on refresh
+    // Restore last active tab
     const savedView = localStorage.getItem('ec_active_view');
     if (savedView && ['agency', 'dashboard', 'client'].includes(savedView)) {
       switchView(savedView);
     }
 
-    // Real-time: agency dashboard gets new comments without refresh
-    db.channel('agency-comments')
+    // Real-time for agency: comments appear/disappear without refresh
+    db.channel('agency-all')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments' }, payload => {
         const c = payload.new;
-        const already = state.comments.find(x => String(x.id) === String(c.id));
-        if (!already) {
-          state.comments.unshift({
-            ...c,
-            id: String(c.id),
-            campaignId: String(c.campaign_id),
-            highlight: c.referring_to,
-            created: new Date(c.created_at).getTime()
-          });
-          renderDashComments();
-          renderCampSidebar();
-          renderCampaignList();
-        }
+        if (state.comments.find(x => String(x.id) === String(c.id))) return;
+        state.comments.unshift({
+          ...c, id: String(c.id), campaignId: String(c.campaign_id),
+          highlight: c.referring_to, created: new Date(c.created_at).getTime()
+        });
+        renderDashComments();
+        renderCampSidebar();
+        renderCampaignList();
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments' }, payload => {
-        const deletedId = String(payload.old.id);
-        const idx = state.comments.findIndex(c => String(c.id) === deletedId);
+        const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
         if (idx !== -1) {
           state.comments.splice(idx, 1);
           renderDashComments();
