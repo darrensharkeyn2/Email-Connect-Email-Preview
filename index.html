@@ -217,7 +217,7 @@
             <button class="copy-btn" onclick="copyLink()">Copy</button>
           </div>
           <div style="font-size:12px; color:#888; margin-top:6px;">
-            💡 Share this link with your client — they'll see only the email preview and feedback form, with no access to the agency dashboard.
+            💡 For this demo, use the <strong>Client Preview</strong> tab to simulate what your client sees.
           </div>
         </div>
       </div>
@@ -263,7 +263,7 @@
             <div class="dot" style="background:#fac775;"></div>
             <div class="dot" style="background:#97c459;"></div>
             <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject">Email Preview</span>
-
+            <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
           </div>
           <div style="position:relative;" id="email-pin-container">
             <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups allow-scripts"></iframe>
@@ -274,7 +274,7 @@
     <div class="client-sidebar">
       <div class="client-sidebar-header">
         <div class="client-sidebar-title" id="client-camp-title">Leave your feedback</div>
-        <div class="client-sidebar-sub">Review the email and share any changes needed below</div>
+        <div class="client-sidebar-sub">Select text in the email to reference it, then leave your comment below</div>
       </div>
       <div id="highlight-indicator" style="display:none;padding:10px 1.5rem;background:#f0fdf6;border-bottom:0.5px solid #c6f6d5;font-size:12px;color:#0d7a4e;align-items:center;gap:8px;">
         <div style="flex:1;">
@@ -403,6 +403,12 @@ function switchView(v, btn) {
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
   if (btn) btn.classList.add('active');
+  else {
+    const map = { agency: 0, dashboard: 1, client: 2 };
+    const navBtns = document.querySelectorAll('.nav-btn');
+    if (navBtns[map[v]]) navBtns[map[v]].classList.add('active');
+  }
+  localStorage.setItem('ec_active_view', v);
   if (v === 'dashboard') renderDashboard();
   if (v === 'client') renderClientView();
 }
@@ -800,8 +806,9 @@ function clearHighlight() {
   } catch(e) {}
 }
 
-function deleteComment(id) {
-  const idx = state.comments.findIndex(c => c.id === id);
+async function deleteComment(id) {
+  if (!confirm('Are you sure you want to delete this comment? This cannot be undone.')) return;
+  const idx = state.comments.findIndex(c => String(c.id) === String(id));
   if (idx === -1) return;
   const campId = state.comments[idx].campaignId;
   state.comments.splice(idx, 1);
@@ -809,6 +816,9 @@ function deleteComment(id) {
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
+  try {
+    await db.from('Comments').delete().eq('id', id);
+  } catch(e) { console.warn('Delete from Supabase failed:', e); }
   showToast('Comment deleted');
 }
 
@@ -876,19 +886,80 @@ async function init() {
     }));
   } catch(e) { console.warn('Supabase load failed:', e); }
 
-  // If review link, go straight to client view — hide everything agency-related
+  // If review link, go straight to client view — hide entire topbar
   if (reviewId) {
     state.activeCampaignId = reviewId;
-    // Hide the entire topbar — client should not see agency nav at all
     document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     const clientView = document.getElementById('view-client');
     clientView.classList.add('active');
-    // Remove top padding since topbar is gone
-    clientView.style.paddingTop = '0';
     renderClientView();
+
+    // Real-time: new comments from other clients appear instantly
+    db.channel('client-comments-' + reviewId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
+        const c = payload.new;
+        const already = state.comments.find(x => String(x.id) === String(c.id));
+        if (!already) {
+          state.comments.unshift({
+            ...c,
+            id: String(c.id),
+            campaignId: String(c.campaign_id),
+            highlight: c.referring_to,
+            created: new Date(c.created_at).getTime()
+          });
+          renderClientComments(reviewId);
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
+        const deletedId = String(payload.old.id);
+        const idx = state.comments.findIndex(c => String(c.id) === deletedId);
+        if (idx !== -1) {
+          const campId = state.comments[idx].campaignId;
+          state.comments.splice(idx, 1);
+          renderClientComments(campId);
+        }
+      })
+      .subscribe();
+
   } else {
     renderCampaignList();
+
+    // Restore last active tab on refresh
+    const savedView = localStorage.getItem('ec_active_view');
+    if (savedView && ['agency', 'dashboard', 'client'].includes(savedView)) {
+      switchView(savedView);
+    }
+
+    // Real-time: agency dashboard gets new comments without refresh
+    db.channel('agency-comments')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments' }, payload => {
+        const c = payload.new;
+        const already = state.comments.find(x => String(x.id) === String(c.id));
+        if (!already) {
+          state.comments.unshift({
+            ...c,
+            id: String(c.id),
+            campaignId: String(c.campaign_id),
+            highlight: c.referring_to,
+            created: new Date(c.created_at).getTime()
+          });
+          renderDashComments();
+          renderCampSidebar();
+          renderCampaignList();
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments' }, payload => {
+        const deletedId = String(payload.old.id);
+        const idx = state.comments.findIndex(c => String(c.id) === deletedId);
+        if (idx !== -1) {
+          state.comments.splice(idx, 1);
+          renderDashComments();
+          renderCampSidebar();
+          renderCampaignList();
+        }
+      })
+      .subscribe();
   }
 }
 
