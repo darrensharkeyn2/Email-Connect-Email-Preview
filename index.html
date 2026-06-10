@@ -282,7 +282,11 @@
   <div class="view" id="view-client">
     <div class="client-preview">
       <div style="width:100%;max-width:680px;">
-        <div class="email-frame-wrap" style="width:100%;">
+        <div id="client-brand-header" style="display:none;background:#0d0d1a;border-radius:12px 12px 0 0;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+          <img src="https://n2.digital/wp-content/uploads/2023/02/Full_Logo_DarkBG-0.svg" alt="N2 Digital" style="height:22px;" onerror="this.style.display='none'" />
+          <span style="font-size:11px;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">Email Review</span>
+        </div>
+        <div class="email-frame-wrap" style="width:100%;border-radius:0 0 12px 12px;" id="client-email-frame-wrap">
           <div class="email-frame-header">
             <div class="dot" style="background:#f09595;"></div>
             <div class="dot" style="background:#fac775;"></div>
@@ -963,6 +967,9 @@ async function init() {
     document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     document.getElementById('view-client').classList.add('active');
+    // Show branded header on client review link
+    const brandHeader = document.getElementById('client-brand-header');
+    if (brandHeader) brandHeader.style.display = 'flex';
     // Remove spinner and show app
     const spinner = document.getElementById('init-spinner');
     if (spinner) spinner.remove();
