@@ -261,6 +261,7 @@
       <div style="padding:1rem 1.5rem;border-bottom:0.5px solid rgba(0,0,0,0.15);background:#fff;display:flex;align-items:center;gap:12px;">
         <div id="dash-campaign-label" style="font-size:14px;font-weight:500;flex:1;">Select a campaign</div>
         <div id="dash-stats" style="font-size:12px;color:#888;"></div>
+        <button id="dash-copy-link-btn" onclick="copyActiveCampaignLink()" style="display:none;font-size:12px;color:#39e07a;background:transparent;border:0.5px solid #39e07a;padding:6px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;font-weight:500;">Copy Review Link</button>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div class="preview-area" id="dash-preview" style="flex:1;">
@@ -442,7 +443,7 @@ async function createCampaign() {
   btn.disabled = true;
 
   const { data, error } = await db.from('campaigns')
-    .insert({ name, client, html, created_at: new Date().toISOString() })
+    .insert({ name, client, html, created_at: new Date().toISOString(), review_link: 'pending' })
     .select().single();
 
   btn.textContent = 'Generate review link';
@@ -462,10 +463,12 @@ async function createCampaign() {
     return;
   }
 
-  state.campaigns.unshift({ ...data, id: String(data.id), created: new Date(data.created_at).getTime() });
+  const realLink = window.location.origin + window.location.pathname + '?review=' + data.id;
+  try { await db.from('campaigns').update({ review_link: realLink }).eq('id', data.id); } catch(e) {}
+  const campaign = { ...data, id: String(data.id), created: new Date(data.created_at).getTime(), review_link: realLink };
+  state.campaigns.unshift(campaign);
   state.activeCampaignId = String(data.id);
-  const link = window.location.origin + window.location.pathname + '?review=' + data.id;
-  document.getElementById('generated-link').textContent = link;
+  document.getElementById('generated-link').textContent = realLink;
   document.getElementById('link-result').style.display = 'block';
   renderCampaignList();
   showToast('Review link created!');
@@ -474,6 +477,20 @@ async function createCampaign() {
 function copyLink() {
   const txt = document.getElementById('generated-link').textContent;
   navigator.clipboard.writeText(txt).catch(() => {});
+  showToast('Link copied!');
+}
+
+function copyLinkById(id) {
+  const camp = state.campaigns.find(c => String(c.id) === String(id));
+  if (!camp || !camp.review_link) { showToast('No link saved for this campaign'); return; }
+  navigator.clipboard.writeText(camp.review_link).catch(() => {});
+  showToast('Link copied!');
+}
+
+function copyActiveCampaignLink() {
+  const camp = state.campaigns.find(c => String(c.id) === String(state.activeCampaignId));
+  if (!camp || !camp.review_link) { showToast('No link saved for this campaign'); return; }
+  navigator.clipboard.writeText(camp.review_link).catch(() => {});
   showToast('Link copied!');
 }
 
@@ -494,6 +511,7 @@ function renderCampaignList() {
       ${comments.length
         ? `<div class="comment-badge ${open > 0 ? 'unread' : ''}">${open > 0 ? open + ' open' : comments.length + ' resolved'}</div>`
         : '<div style="font-size:12px;color:#888;">No comments</div>'}
+      ${c.review_link ? `<button onclick="event.stopPropagation();copyLinkById('${c.id}')" style="font-size:11px;color:#39e07a;background:transparent;border:0.5px solid #39e07a;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0;">Copy link</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -594,6 +612,8 @@ function renderDashPreview() {
   const open = comments.filter(c => !c.resolved).length;
   label.textContent = camp.name + ' — ' + camp.client;
   stats.textContent = open + ' open · ' + (comments.length - open) + ' resolved';
+  const copyBtn = document.getElementById('dash-copy-link-btn');
+  if (copyBtn) copyBtn.style.display = camp.review_link ? 'block' : 'none';
 
   area.innerHTML = `<div class="email-frame-wrap" style="width:100%;max-width:680px;">
     <div class="email-frame-header">
@@ -821,8 +841,9 @@ function clearHighlight() {
   } catch(e) {}
 }
 
-function deleteComment(id) {
-  const idx = state.comments.findIndex(c => c.id === id);
+async function deleteComment(id) {
+  if (!confirm('Are you sure you want to delete this comment? This cannot be undone.')) return;
+  const idx = state.comments.findIndex(c => String(c.id) === String(id));
   if (idx === -1) return;
   const campId = state.comments[idx].campaignId;
   state.comments.splice(idx, 1);
@@ -830,6 +851,7 @@ function deleteComment(id) {
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
+  try { await db.from('Comments').delete().eq('id', id); } catch(e) {}
   showToast('Comment deleted');
 }
 
@@ -886,7 +908,7 @@ async function init() {
       db.from('campaigns').select('*').order('created_at', { ascending: false }),
       db.from('Comments').select('*').order('created_at', { ascending: false })
     ]);
-    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime() }));
+    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime(), review_link: c.review_link || null }));
     if (comments) state.comments = comments.map(c => ({
       ...c,
       id: String(c.id),
@@ -897,7 +919,6 @@ async function init() {
     }));
   } catch(e) { console.warn('Supabase load failed:', e); }
 
-  // If review link, go straight to client view — topbar already hidden by inline script
   if (reviewId) {
     state.activeCampaignId = reviewId;
     document.querySelector('.topbar').style.display = 'none';
@@ -905,12 +926,40 @@ async function init() {
     document.getElementById('view-client').classList.add('active');
     document.querySelector('.app').style.display = 'flex';
     renderClientView();
+
+    // Realtime: new/deleted comments appear instantly for client
+    db.channel('client-' + reviewId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
+        const c = payload.new;
+        if (state.comments.find(x => String(x.id) === String(c.id))) return;
+        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, created: new Date(c.created_at).getTime() });
+        renderClientComments(reviewId);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
+        const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
+        if (idx !== -1) { state.comments.splice(idx, 1); renderClientComments(reviewId); }
+      })
+      .subscribe();
+
   } else {
     document.querySelector('.app').style.display = 'flex';
     renderCampaignList();
-    // Restore last active tab
     const savedView = localStorage.getItem('ec_active_view');
     if (savedView && ['agency','dashboard','client'].includes(savedView)) switchView(savedView);
+
+    // Realtime: agency sees new/deleted comments without refresh
+    db.channel('agency-all')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments' }, payload => {
+        const c = payload.new;
+        if (state.comments.find(x => String(x.id) === String(c.id))) return;
+        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, created: new Date(c.created_at).getTime() });
+        renderDashComments(); renderCampSidebar(); renderCampaignList();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments' }, payload => {
+        const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
+        if (idx !== -1) { state.comments.splice(idx, 1); renderDashComments(); renderCampSidebar(); renderCampaignList(); }
+      })
+      .subscribe();
   }
 }
 
