@@ -915,8 +915,10 @@ async function submitComment() {
     resolved: false
   };
 
-  // Only add locally if not already added by realtime
-  if (!state.comments.find(x => String(x.id) === realId)) {
+  // On client review link: skip local add, let realtime handle it (prevents duplicates)
+  // On agency side: add locally since realtime goes to a different channel
+  const isClientLink = !!new URLSearchParams(window.location.search).get('review');
+  if (!isClientLink && !state.comments.find(x => String(x.id) === realId)) {
     state.comments.unshift(localComment);
   }
   document.getElementById('comment-body').value = '';
