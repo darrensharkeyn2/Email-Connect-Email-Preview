@@ -128,6 +128,42 @@
   .modal { background: #fff; border-radius: 12px; padding: 1.5rem; width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
   .modal-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
   .modal-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+
+  /* ── RESPONSIVE ─────────────────────────────────────── */
+  @media (max-width: 768px) {
+    /* Topbar */
+    .topbar { padding: 0 1rem; height: 52px; }
+    .topbar-logo img { height: 22px; }
+    .nav-btn { font-size: 12px; padding: 5px 10px; }
+
+    /* Agency view */
+    .agency-view { padding: 1rem; }
+    .fields-row { grid-template-columns: 1fr; }
+
+    /* Dashboard — stack sidebar on top */
+    .dashboard-view { flex-direction: column; }
+    .sidebar { width: 100%; min-width: unset; border-right: none; border-bottom: 0.5px solid rgba(0,0,0,0.15); max-height: 220px; }
+    .main-dashboard { overflow: visible; }
+    .preview-area { padding: 1rem; }
+    .email-frame-wrap { width: 100% !important; }
+
+    /* Client view — stack vertically */
+    .client-view { flex-direction: column; }
+    .client-preview { padding: 1rem; }
+    .client-sidebar { width: 100%; min-width: unset; border-left: none; border-top: 0.5px solid rgba(0,0,0,0.15); max-height: 60vh; overflow-y: auto; }
+
+    /* Modals */
+    .modal { width: 92vw; padding: 1.25rem; }
+  }
+
+  @media (max-width: 480px) {
+    .nav-btn { font-size: 11px; padding: 4px 8px; }
+    .topbar-logo img { height: 20px; }
+    .agency-view { padding: 0.75rem; }
+    .card { padding: 1rem; }
+    .client-sidebar { max-height: 55vh; }
+    .sidebar { max-height: 200px; }
+  }
   .modal-label { font-size: 12px; color: #888; }
   .modal-input { padding: 8px 12px; border: 0.5px solid rgba(0,0,0,0.2); border-radius: 8px; font-size: 14px; outline: none; width: 100%; }
   .modal-input:focus { border-color: #39e07a; }
