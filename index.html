@@ -870,6 +870,7 @@ async function submitComment() {
     author,
     text,
     referring_to: finalReference,
+    image_url: state.attachedImage || null,
     resolved: false,
     created_at: new Date().toISOString()
   };
@@ -915,6 +916,7 @@ async function init() {
       campaignId: String(c.campaign_id),
       referringTo: c.referring_to,
       highlight: c.referring_to,
+      image: c.image_url || null,
       created: new Date(c.created_at).getTime()
     }));
   } catch(e) { console.warn('Supabase load failed:', e); }
@@ -932,7 +934,7 @@ async function init() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
         const c = payload.new;
         if (state.comments.find(x => String(x.id) === String(c.id))) return;
-        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, created: new Date(c.created_at).getTime() });
+        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
         renderClientComments(reviewId);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
@@ -943,16 +945,19 @@ async function init() {
 
   } else {
     document.querySelector('.app').style.display = 'flex';
-    renderCampaignList();
     const savedView = localStorage.getItem('ec_active_view');
-    if (savedView && ['agency','dashboard','client'].includes(savedView)) switchView(savedView);
+    if (savedView && ['agency','dashboard','client'].includes(savedView)) {
+      switchView(savedView);
+    } else {
+      renderCampaignList();
+    }
 
     // Realtime: agency sees new/deleted comments without refresh
     db.channel('agency-all')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments' }, payload => {
         const c = payload.new;
         if (state.comments.find(x => String(x.id) === String(c.id))) return;
-        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, created: new Date(c.created_at).getTime() });
+        state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
         renderDashComments(); renderCampSidebar(); renderCampaignList();
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments' }, payload => {
