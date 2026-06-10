@@ -9,16 +9,22 @@
   // Runs before paint — prevents agency flash on client review links
   (function() {
     if (new URLSearchParams(window.location.search).get('review')) {
-      document.documentElement.style.setProperty('--hide-topbar', 'none');
       document.addEventListener('DOMContentLoaded', function() {
         var topbar = document.querySelector('.topbar');
-        var app = document.querySelector('.app');
         if (topbar) topbar.style.display = 'none';
-        if (app) { app.style.display = 'flex'; }
-        // Make sure only client view is visible
-        document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
-        var cv = document.getElementById('view-client');
-        if (cv) cv.classList.add('active');
+        // Show spinner immediately instead of white screen
+        document.body.style.display = 'flex';
+        document.body.style.alignItems = 'center';
+        document.body.style.justifyContent = 'center';
+        document.body.style.minHeight = '100vh';
+        document.body.style.background = '#f5f5f3';
+        var spinner = document.createElement('div');
+        spinner.id = 'init-spinner';
+        spinner.innerHTML = '<div style="text-align:center;"><div style="width:32px;height:32px;border:3px solid #e0e0e0;border-top-color:#39e07a;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 12px;"></div><div style="font-size:13px;color:#888;font-family:system-ui,sans-serif;">Loading your email preview...</div></div>';
+        document.body.appendChild(spinner);
+        var style = document.createElement('style');
+        style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+        document.head.appendChild(style);
       });
     }
   })();
@@ -743,7 +749,7 @@ function renderClientComments(campId) {
     return;
   }
   const pinnedComments = comments.filter(x => x.pin);
-  el.innerHTML = comments.slice().reverse().map(c => {
+  el.innerHTML = comments.slice().sort((a,b) => b.created - a.created).map(c => {
     const pinNum = c.pin ? pinnedComments.indexOf(c) + 1 : null;
     return `<div class="client-comment-card">
       <div class="client-comment-name" style="display:flex;align-items:center;gap:6px;">
@@ -885,8 +891,10 @@ async function submitComment() {
 
   const { data, error } = await db.from('Comments').insert(comment).select().single();
 
+  // Use real Supabase ID so realtime duplicate check works correctly
+  const realId = data ? String(data.id) : uid();
   const localComment = {
-    id: data ? data.id : uid(),
+    id: realId,
     campaignId: camp.id,
     author, text,
     referringTo: finalReference,
@@ -896,7 +904,10 @@ async function submitComment() {
     resolved: false
   };
 
-  state.comments.unshift(localComment);
+  // Only add locally if not already added by realtime
+  if (!state.comments.find(x => String(x.id) === realId)) {
+    state.comments.unshift(localComment);
+  }
   document.getElementById('comment-body').value = '';
   removeImage();
   clearHighlight();
@@ -934,6 +945,10 @@ async function init() {
     document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     document.getElementById('view-client').classList.add('active');
+    // Remove spinner and show app
+    const spinner = document.getElementById('init-spinner');
+    if (spinner) spinner.remove();
+    document.body.style.cssText = '';
     document.querySelector('.app').style.display = 'flex';
     renderClientView();
 
