@@ -422,6 +422,12 @@ function switchView(v, btn) {
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
   if (btn) btn.classList.add('active');
+  else {
+    const map = { agency: 0, dashboard: 1, client: 2 };
+    const navBtns = document.querySelectorAll('.nav-btn');
+    if (navBtns[map[v]]) navBtns[map[v]].classList.add('active');
+  }
+  if (v === 'agency') renderCampaignList();
   if (v === 'dashboard') renderDashboard();
   if (v === 'client') renderClientView();
 }
@@ -589,6 +595,7 @@ async function selectCampaign(id) {
       id: String(c.id),
       campaignId: String(c.campaign_id),
       highlight: c.referring_to,
+      image: c.image_url || null,
       created: new Date(c.created_at).getTime()
     }))
   ];
@@ -709,8 +716,9 @@ function renderClientView() {
   const iframe = document.getElementById('client-email-iframe');
   // Embed postMessage selection script directly into the email HTML
   const selectionScript = `<script>document.addEventListener('mouseup',function(){var t=window.getSelection?window.getSelection().toString().trim():'';if(t)window.parent.postMessage({type:'email-selection',text:t},'*');});<\/script>`;
-  const htmlWithScript = camp.html.includes('</body>')
-    ? camp.html.replace('</body>', selectionScript + '</body>')
+  const bodyCloseMatch = camp.html.match(/<\/body>/i);
+  const htmlWithScript = bodyCloseMatch
+    ? camp.html.replace(/<\/body>/i, selectionScript + '</body>')
     : camp.html + selectionScript;
   iframe.srcdoc = htmlWithScript;
   iframe.onload = () => {
