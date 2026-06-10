@@ -325,7 +325,7 @@
             <div style="font-size:11px;color:#888;margin-top:4px;" id="image-size-label"></div>
           </div>
         </div>
-        <button class="btn-primary" onclick="submitComment()" style="width:100%;">Submit feedback</button>
+        <button class="btn-primary" id="submit-btn" onclick="submitComment()" style="width:100%;">Submit feedback</button>
       </div>
       <div style="padding:0.75rem 1.5rem;border-bottom:0.5px solid rgba(0,0,0,0.15);font-size:12px;font-weight:500;color:#888;">Submitted feedback</div>
       <div class="client-comments-list" id="client-comments-list">
@@ -879,6 +879,13 @@ async function submitComment() {
   if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
   if (!camp) { showToast('No email loaded'); return; }
 
+  // Show loading spinner on button
+  const submitBtn = document.getElementById('submit-btn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;justify-content:center;"><span style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;"></span>Sending...</span>';
+  }
+
   const comment = {
     campaign_id: camp.id,
     author,
@@ -889,6 +896,9 @@ async function submitComment() {
     created_at: new Date().toISOString()
   };
 
+  // Capture image before removeImage() clears it
+  const imageToSave = state.attachedImage;
+
   const { data, error } = await db.from('Comments').insert(comment).select().single();
 
   // Use real Supabase ID so realtime duplicate check works correctly
@@ -898,7 +908,7 @@ async function submitComment() {
     campaignId: camp.id,
     author, text,
     referringTo: finalReference,
-    image: state.attachedImage,
+    image: imageToSave,
     highlight: finalReference,
     created: Date.now(),
     resolved: false
@@ -915,6 +925,11 @@ async function submitComment() {
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
+  // Restore submit button
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Submit feedback';
+  }
   showToast('Feedback submitted!');
 }
 
