@@ -580,6 +580,14 @@ function renderCampSidebar() {
 async function selectCampaign(id) {
   state.activeCampaignId = String(id);
   renderCampSidebar();
+  // Load full HTML for this campaign if not already loaded
+  const campIdx = state.campaigns.findIndex(c => String(c.id) === String(id));
+  if (campIdx !== -1 && !state.campaigns[campIdx].html) {
+    try {
+      const { data: fullCamp } = await db.from('campaigns').select('html').eq('id', id).single();
+      if (fullCamp) state.campaigns[campIdx].html = fullCamp.html;
+    } catch(e) {}
+  }
   renderDashPreview();
   try {
   const { data: dashData } = await db.from('Comments')
@@ -749,7 +757,6 @@ function renderClientComments(campId) {
       <div class="client-comment-name" style="display:flex;align-items:center;gap:6px;">
         ${pinNum ? `<span class="pin-ref">${pinNum}</span>` : ''}
         ${c.author}
-        <button onclick="deleteComment('${c.id}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;line-height:1;padding:0 2px;" title="Delete comment">✕</button>
       </div>
       ${c.highlight ? `<div style="font-size:11px;background:#fffbea;border-left:3px solid #f59e0b;padding:4px 8px;border-radius:0 4px 4px 0;margin:4px 0;color:#92400e;font-style:italic;">"${c.highlight}"</div>` : ''}
       <div class="client-comment-body">${c.text}</div>
@@ -870,7 +877,7 @@ async function submitComment() {
   const camp = state.activeCampaignId
     ? state.campaigns.find(c => String(c.id) === String(state.activeCampaignId))
     : state.campaigns[state.campaigns.length - 1];
-  if (!text && !state.attachedImage) { showToast('Please write a comment or attach an image'); return; }
+  if (!text) { showToast('Please add a comment — describe what you'd like changed'); return; }
   if (!camp) { showToast('No email loaded'); return; }
 
   const comment = {
@@ -914,7 +921,7 @@ async function init() {
 
   try {
     const [{ data: campaigns }, { data: comments }] = await Promise.all([
-      db.from('campaigns').select('*').order('created_at', { ascending: false }),
+      db.from('campaigns').select('id, name, client, created_at, review_link').order('created_at', { ascending: false }),
       db.from('Comments').select('*').order('created_at', { ascending: false })
     ]);
     if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime(), review_link: c.review_link || null }));
