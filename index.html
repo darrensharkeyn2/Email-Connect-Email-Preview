@@ -217,7 +217,7 @@
             <button class="copy-btn" onclick="copyLink()">Copy</button>
           </div>
           <div style="font-size:12px; color:#888; margin-top:6px;">
-            💡 For this demo, use the <strong>Client Preview</strong> tab to simulate what your client sees.
+            💡 Share this link with your client — they'll see only the email preview and feedback form, with no access to the agency dashboard.
           </div>
         </div>
       </div>
@@ -263,7 +263,7 @@
             <div class="dot" style="background:#fac775;"></div>
             <div class="dot" style="background:#97c459;"></div>
             <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject">Email Preview</span>
-            <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
+
           </div>
           <div style="position:relative;" id="email-pin-container">
             <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups allow-scripts"></iframe>
@@ -274,7 +274,7 @@
     <div class="client-sidebar">
       <div class="client-sidebar-header">
         <div class="client-sidebar-title" id="client-camp-title">Leave your feedback</div>
-        <div class="client-sidebar-sub">Select text in the email to reference it, then leave your comment below</div>
+        <div class="client-sidebar-sub">Review the email and share any changes needed below</div>
       </div>
       <div id="highlight-indicator" style="display:none;padding:10px 1.5rem;background:#f0fdf6;border-bottom:0.5px solid #c6f6d5;font-size:12px;color:#0d7a4e;align-items:center;gap:8px;">
         <div style="flex:1;">
@@ -876,13 +876,16 @@ async function init() {
     }));
   } catch(e) { console.warn('Supabase load failed:', e); }
 
-  // If review link, go straight to client view with correct campaign
+  // If review link, go straight to client view — hide everything agency-related
   if (reviewId) {
     state.activeCampaignId = reviewId;
-    // Hide nav so client can't switch to agency view
-    document.querySelector('.topbar-nav').style.display = 'none';
+    // Hide the entire topbar — client should not see agency nav at all
+    document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-    document.getElementById('view-client').classList.add('active');
+    const clientView = document.getElementById('view-client');
+    clientView.classList.add('active');
+    // Remove top padding since topbar is gone
+    clientView.style.paddingTop = '0';
     renderClientView();
   } else {
     renderCampaignList();
