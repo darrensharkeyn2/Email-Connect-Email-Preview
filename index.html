@@ -292,7 +292,7 @@
             <div class="dot" style="background:#fac775;"></div>
             <div class="dot" style="background:#97c459;"></div>
             <span style="font-size:12px;color:#888;margin-left:8px;" id="client-subject"></span>
-            <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text to reference it</span>
+            <span style="margin-left:auto;font-size:11px;color:#888;">✏️ Select text or click to pin a spot</span>
           </div>
           <div style="position:relative;" id="email-pin-container">
             <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups allow-scripts"></iframe>
@@ -310,7 +310,7 @@
           <div style="font-weight:500;margin-bottom:2px;">✏️ Referencing:</div>
           <div id="highlight-text-preview" style="font-style:italic;color:#555;"></div>
         </div>
-        <button onclick="clearHighlight()" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;flex-shrink:0;">✕</button>
+        <button onclick="clearHighlight();clearPin();" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;flex-shrink:0;">✕</button>
       </div>
       <div class="comment-form">
         <input class="name-input" id="commenter-name" placeholder="" />
@@ -610,6 +610,7 @@ async function selectCampaign(id) {
       campaignId: String(c.campaign_id),
       highlight: c.referring_to,
       image: c.image_url || null,
+      pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null,
       created: new Date(c.created_at).getTime()
     }))
   ];
@@ -643,7 +644,9 @@ function renderDashPreview() {
       <div class="dot" style="background:#97c459;"></div>
       <span style="font-size:12px;color:#888;margin-left:8px;">${camp.name}</span>
     </div>
-    <iframe id="dash-email-iframe" style="width:100%;border:none;min-height:600px;display:block;" srcdoc="${escapeAttr(camp.html)}" sandbox="allow-same-origin allow-popups"></iframe>
+    <div style="position:relative;" id="dash-pin-container">
+      <iframe id="dash-email-iframe" style="width:100%;border:none;min-height:600px;display:block;" srcdoc="${escapeAttr(camp.html)}" sandbox="allow-same-origin allow-popups"></iframe>
+    </div>
   </div>`;
 
   const iframe = document.getElementById('dash-email-iframe');
@@ -653,8 +656,26 @@ function renderDashPreview() {
         const h = iframe.contentDocument.body.scrollHeight;
         iframe.style.height = (h + 40) + 'px';
       } catch(e) {}
+      renderDashPins(camp.id);
     };
   }
+}
+
+// Render pins on the agency dashboard preview (read-only, no click-to-place)
+function renderDashPins(campId) {
+  const container = document.getElementById('dash-pin-container');
+  if (!container) return;
+  container.querySelectorAll('.pin-placed').forEach(el => el.remove());
+  const comments = state.comments.filter(c => String(c.campaignId) === String(campId) && c.pin);
+  comments.slice().sort((a,b) => a.created - b.created).forEach((c, idx) => {
+    const marker = document.createElement('div');
+    marker.className = 'pin pin-placed';
+    marker.textContent = idx + 1;
+    marker.style.left = c.pin.xPercent + '%';
+    marker.style.top = c.pin.yPercent + '%';
+    marker.title = c.text || '';
+    container.appendChild(marker);
+  });
 }
 
 function highlightDashComment(id) {
@@ -676,7 +697,7 @@ function renderDashComments() {
     panel.style.display = 'none';
     return;
   }
-  const pinnedComments = comments.filter(c => c.pin);
+  const pinnedComments = comments.filter(c => c.pin).sort((a,b) => a.created - b.created);
   panel.style.display = 'block';
   panel.innerHTML = `<div style="padding:10px 16px 6px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Feedback (${comments.length})</div>` +
     comments.slice().reverse().map(c => {
@@ -744,6 +765,23 @@ function renderClientView() {
         const link = e.target.closest('a, button');
         if (link) e.preventDefault();
       }, true);
+      // Pin placement: click anywhere on the email to drop a pin (works regardless of text selection)
+      iframe.contentDocument.addEventListener('click', (e) => {
+        // If user just made a text selection, don't also drop a pin
+        const sel = iframe.contentDocument.getSelection ? iframe.contentDocument.getSelection().toString().trim() : '';
+        if (sel) return;
+        // Use pageX/pageY (absolute position in the document, including scroll) divided by the
+        // FULL document dimensions — this matches how the pin is later rendered as a % of the
+        // email-pin-container, which wraps the entire scrollable email, not just the visible viewport.
+        const docEl = iframe.contentDocument.documentElement;
+        const fullWidth = docEl.scrollWidth || docEl.clientWidth;
+        const fullHeight = docEl.scrollHeight || docEl.clientHeight;
+        const xPercent = (e.pageX / fullWidth) * 100;
+        const yPercent = (e.pageY / fullHeight) * 100;
+        placePin(xPercent, yPercent);
+      });
+      // Render existing pins AFTER the iframe height is set, so the container is correctly sized
+      renderExistingPins(camp.id);
     } catch(e) {}
   };
   renderClientComments(camp.id);
@@ -756,8 +794,8 @@ function renderClientComments(campId) {
     el.innerHTML = '<div style="color:#888;font-size:13px;">No comments yet.</div>';
     return;
   }
-  const pinnedComments = comments.filter(x => x.pin);
-  el.innerHTML = comments.slice().sort((a,b) => b.created - a.created).map(c => {
+  const pinnedComments = comments.filter(x => x.pin).sort((a,b) => a.created - b.created);
+  el.innerHTML = comments.slice().sort((a,b) => a.created - b.created).map(c => {
     const pinNum = c.pin ? pinnedComments.indexOf(c) + 1 : null;
     return `<div class="client-comment-card">
       <div class="client-comment-name" style="display:flex;align-items:center;gap:6px;">
@@ -833,6 +871,7 @@ function closeLightbox() {
 
 // ─── HIGHLIGHT SYSTEM ────────────────────────────────────────────────────────
 let selectedHighlight = null;
+let selectedPin = null; // { xPercent, yPercent } — set when client clicks the email
 
 function setupHighlightListener() {
   // Selection is now handled via postMessage injected into srcdoc HTML
@@ -863,6 +902,55 @@ function clearHighlight() {
   } catch(e) {}
 }
 
+// ─── PIN SYSTEM (additive — does not touch highlight system above) ──────────
+function placePin(xPercent, yPercent) {
+  selectedPin = { xPercent, yPercent };
+  renderPendingPin();
+  // Show the same indicator bar used for highlights, repurposed for pins
+  const previewEl = document.getElementById('highlight-text-preview');
+  const indicatorEl = document.getElementById('highlight-indicator');
+  if (previewEl) previewEl.textContent = '📍 Pin placed — describe what you\'d like changed below';
+  if (indicatorEl) indicatorEl.style.display = 'flex';
+}
+
+function clearPin() {
+  selectedPin = null;
+  const existing = document.getElementById('pending-pin-marker');
+  if (existing) existing.remove();
+}
+
+function renderPendingPin() {
+  const container = document.getElementById('email-pin-container');
+  if (!container || !selectedPin) return;
+  let marker = document.getElementById('pending-pin-marker');
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.id = 'pending-pin-marker';
+    marker.className = 'pin pin-pending';
+    marker.textContent = '+';
+    container.appendChild(marker);
+  }
+  marker.style.left = selectedPin.xPercent + '%';
+  marker.style.top = selectedPin.yPercent + '%';
+}
+
+function renderExistingPins(campId) {
+  const container = document.getElementById('email-pin-container');
+  if (!container) return;
+  // Clear old placed pins (but not the pending one being placed)
+  container.querySelectorAll('.pin-placed').forEach(el => el.remove());
+  const comments = state.comments.filter(c => String(c.campaignId) === String(campId) && c.pin);
+  comments.slice().sort((a,b) => a.created - b.created).forEach((c, idx) => {
+    const marker = document.createElement('div');
+    marker.className = 'pin pin-placed';
+    marker.textContent = idx + 1;
+    marker.style.left = c.pin.xPercent + '%';
+    marker.style.top = c.pin.yPercent + '%';
+    marker.title = c.text || '';
+    container.appendChild(marker);
+  });
+}
+
 async function deleteComment(id) {
   if (!confirm('Are you sure you want to delete this comment? This cannot be undone.')) return;
   const idx = state.comments.findIndex(c => String(c.id) === String(id));
@@ -873,7 +961,12 @@ async function deleteComment(id) {
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
+  // Remove the pin marker immediately so it doesn't linger on screen
+  renderExistingPins(campId);
+  if (state.activeCampaignId) renderDashPins(state.activeCampaignId);
   try { await db.from('Comments').delete().eq('id', id); } catch(e) {}
+  // Safety re-render in case the deleting browser's own DOM was momentarily out of sync
+  setTimeout(() => { renderExistingPins(campId); if (state.activeCampaignId) renderDashPins(state.activeCampaignId); }, 300);
   showToast('Comment deleted');
 }
 
@@ -900,6 +993,8 @@ async function submitComment() {
     text,
     referring_to: finalReference,
     image_url: state.attachedImage || null,
+    pin_x: selectedPin ? selectedPin.xPercent : null,
+    pin_y: selectedPin ? selectedPin.yPercent : null,
     resolved: false,
     created_at: new Date().toISOString()
   };
@@ -911,6 +1006,7 @@ async function submitComment() {
 
   // Use real Supabase ID so realtime duplicate check works correctly
   const realId = data ? String(data.id) : uid();
+  const pinToSave = selectedPin ? { xPercent: selectedPin.xPercent, yPercent: selectedPin.yPercent } : null;
   const localComment = {
     id: realId,
     campaignId: camp.id,
@@ -918,6 +1014,7 @@ async function submitComment() {
     referringTo: finalReference,
     image: imageToSave,
     highlight: finalReference,
+    pin: pinToSave,
     created: Date.now(),
     resolved: false
   };
@@ -931,7 +1028,9 @@ async function submitComment() {
   document.getElementById('comment-body').value = '';
   removeImage();
   clearHighlight();
+  clearPin();
   renderClientComments(camp.id);
+  renderExistingPins(camp.id);
   renderCampaignList();
   renderDashComments();
   renderCampSidebar();
@@ -961,6 +1060,7 @@ async function init() {
       referringTo: c.referring_to,
       highlight: c.referring_to,
       image: c.image_url || null,
+      pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null,
       created: new Date(c.created_at).getTime()
     }));
   } catch(e) { console.warn('Supabase load failed:', e); }
@@ -1002,16 +1102,20 @@ async function init() {
         try {
           const { data } = await db.from('Comments').select('*').eq('id', payload.new.id).single();
           const c = data || payload.new;
-          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
+          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null, created: new Date(c.created_at).getTime() });
         } catch(e) {
           const c = payload.new;
-          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
+          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null, created: new Date(c.created_at).getTime() });
         }
         renderClientComments(resolvedId);
+        renderExistingPins(resolvedId);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + resolvedId }, payload => {
         const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
-        if (idx !== -1) { state.comments.splice(idx, 1); renderClientComments(resolvedId); }
+        if (idx !== -1) { state.comments.splice(idx, 1); }
+        // Always re-render pins on DELETE regardless of whether it was found locally — keeps pins in sync
+        renderClientComments(resolvedId);
+        renderExistingPins(resolvedId);
       })
       .subscribe();
 
@@ -1050,16 +1154,19 @@ async function init() {
         try {
           const { data } = await db.from('Comments').select('*').eq('id', payload.new.id).single();
           const c = data || payload.new;
-          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
+          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null, created: new Date(c.created_at).getTime() });
         } catch(e) {
           const c = payload.new;
-          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
+          state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, pin: (c.pin_x !== null && c.pin_x !== undefined && c.pin_y !== null && c.pin_y !== undefined) ? { xPercent: c.pin_x, yPercent: c.pin_y } : null, created: new Date(c.created_at).getTime() });
         }
         renderDashComments(); renderCampSidebar(); renderCampaignList();
+        if (state.activeCampaignId) renderDashPins(state.activeCampaignId);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments' }, payload => {
         const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
-        if (idx !== -1) { state.comments.splice(idx, 1); renderDashComments(); renderCampSidebar(); renderCampaignList(); }
+        if (idx !== -1) { state.comments.splice(idx, 1); }
+        renderDashComments(); renderCampSidebar(); renderCampaignList();
+        if (state.activeCampaignId) renderDashPins(state.activeCampaignId);
       })
       .subscribe();
   }
