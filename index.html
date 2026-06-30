@@ -459,8 +459,11 @@ async function createCampaign() {
   btn.textContent = 'Saving...';
   btn.disabled = true;
 
+  // Generate a random unguessable slug for the public review link
+  const slug = Array.from({length: 24}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+
   const { data, error } = await db.from('campaigns')
-    .insert({ name, client, html, created_at: new Date().toISOString(), review_link: 'pending' })
+    .insert({ name, client, html, created_at: new Date().toISOString(), review_link: 'pending', slug })
     .select().single();
 
   btn.textContent = 'Generate review link';
@@ -480,9 +483,9 @@ async function createCampaign() {
     return;
   }
 
-  const realLink = window.location.origin + window.location.pathname + '?review=' + data.id;
+  const realLink = window.location.origin + window.location.pathname + '?review=' + slug;
   try { await db.from('campaigns').update({ review_link: realLink }).eq('id', data.id); } catch(e) {}
-  const campaign = { ...data, id: String(data.id), created: new Date(data.created_at).getTime(), review_link: realLink };
+  const campaign = { ...data, id: String(data.id), slug, created: new Date(data.created_at).getTime(), review_link: realLink };
   state.campaigns.unshift(campaign);
   state.activeCampaignId = String(data.id);
   document.getElementById('generated-link').textContent = realLink;
@@ -950,7 +953,7 @@ async function init() {
       db.from('campaigns').select('*').order('created_at', { ascending: false }),
       db.from('Comments').select('*').order('created_at', { ascending: false })
     ]);
-    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), created: new Date(c.created_at).getTime(), review_link: c.review_link || null }));
+    if (campaigns) state.campaigns = campaigns.map(c => ({ ...c, id: String(c.id), slug: c.slug || null, created: new Date(c.created_at).getTime(), review_link: c.review_link || null }));
     if (comments) state.comments = comments.map(c => ({
       ...c,
       id: String(c.id),
@@ -963,7 +966,11 @@ async function init() {
   } catch(e) { console.warn('Supabase load failed:', e); }
 
   if (reviewId) {
-    state.activeCampaignId = reviewId;
+    // Resolve the slug from the URL to the real numeric campaign ID
+    // Everything downstream keeps using the numeric ID exactly as before — zero other changes needed
+    const matchedCamp = state.campaigns.find(c => c.slug === reviewId) || state.campaigns.find(c => String(c.id) === String(reviewId));
+    const resolvedId = matchedCamp ? String(matchedCamp.id) : reviewId;
+    state.activeCampaignId = resolvedId;
     document.querySelector('.topbar').style.display = 'none';
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     document.getElementById('view-client').classList.add('active');
@@ -977,16 +984,16 @@ async function init() {
     document.querySelector('.app').style.display = 'flex';
     renderClientView();
 
-    // Realtime: new/deleted comments appear instantly for client
-    db.channel('client-' + reviewId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, async payload => {
+    // Realtime: new/deleted comments appear instantly for client (uses resolved numeric ID)
+    db.channel('client-' + resolvedId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + resolvedId }, async payload => {
         const existing = state.comments.find(x => String(x.id) === String(payload.new.id));
         if (existing) {
           // Already added locally — update image if missing (realtime payload may truncate large fields)
           if (!existing.image) {
             try {
               const { data } = await db.from('Comments').select('image_url').eq('id', payload.new.id).single();
-              if (data && data.image_url) { existing.image = data.image_url; renderClientComments(reviewId); }
+              if (data && data.image_url) { existing.image = data.image_url; renderClientComments(resolvedId); }
             } catch(e) {}
           }
           return;
@@ -1000,11 +1007,11 @@ async function init() {
           const c = payload.new;
           state.comments.unshift({ ...c, id: String(c.id), campaignId: String(c.campaign_id), highlight: c.referring_to, image: c.image_url || null, created: new Date(c.created_at).getTime() });
         }
-        renderClientComments(reviewId);
+        renderClientComments(resolvedId);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + reviewId }, payload => {
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'Comments', filter: 'campaign_id=eq.' + resolvedId }, payload => {
         const idx = state.comments.findIndex(c => String(c.id) === String(payload.old.id));
-        if (idx !== -1) { state.comments.splice(idx, 1); renderClientComments(reviewId); }
+        if (idx !== -1) { state.comments.splice(idx, 1); renderClientComments(resolvedId); }
       })
       .subscribe();
 
