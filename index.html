@@ -765,24 +765,45 @@ function renderClientView() {
         const link = e.target.closest('a, button');
         if (link) e.preventDefault();
       }, true);
+      // TEMPORARY DEBUG: shows exactly what happens on click, remove once pins are confirmed working
+      let debugBox = document.getElementById('pin-debug-box');
+      if (!debugBox) {
+        debugBox = document.createElement('div');
+        debugBox.id = 'pin-debug-box';
+        debugBox.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px 14px;border-radius:8px;z-index:99999;max-width:380px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
+        debugBox.textContent = 'Pin debug: waiting for click...';
+        document.body.appendChild(debugBox);
+      }
       // Pin placement: click anywhere on the email to drop a pin (works regardless of text selection)
       iframe.contentDocument.addEventListener('click', (e) => {
-        // If user just made a text selection, don't also drop a pin
-        const sel = iframe.contentDocument.getSelection ? iframe.contentDocument.getSelection().toString().trim() : '';
-        if (sel) return;
-        // Use pageX/pageY (absolute position in the document, including scroll) divided by the
-        // FULL document dimensions — this matches how the pin is later rendered as a % of the
-        // email-pin-container, which wraps the entire scrollable email, not just the visible viewport.
-        const docEl = iframe.contentDocument.documentElement;
-        const fullWidth = docEl.scrollWidth || docEl.clientWidth;
-        const fullHeight = docEl.scrollHeight || docEl.clientHeight;
-        const xPercent = (e.pageX / fullWidth) * 100;
-        const yPercent = (e.pageY / fullHeight) * 100;
-        placePin(xPercent, yPercent);
+        try {
+          // If user just made a text selection, don't also drop a pin
+          const sel = iframe.contentDocument.getSelection ? iframe.contentDocument.getSelection().toString().trim() : '';
+          if (sel) { debugBox.textContent = 'Click ignored — text was selected: "' + sel.slice(0,30) + '"'; return; }
+          const docEl = iframe.contentDocument.documentElement;
+          const fullWidth = docEl.scrollWidth || docEl.clientWidth;
+          const fullHeight = docEl.scrollHeight || docEl.clientHeight;
+          const xPercent = (e.pageX / fullWidth) * 100;
+          const yPercent = (e.pageY / fullHeight) * 100;
+          debugBox.textContent = 'CLICK FIRED — target: ' + e.target.tagName + ' | pageX:' + e.pageX + ' pageY:' + e.pageY + ' | fullW:' + fullWidth + ' fullH:' + fullHeight + ' | xPercent:' + xPercent.toFixed(1) + ' yPercent:' + yPercent.toFixed(1);
+          placePin(xPercent, yPercent);
+        } catch(innerErr) {
+          debugBox.textContent = 'ERROR inside click handler: ' + innerErr.message;
+        }
       });
       // Render existing pins AFTER the iframe height is set, so the container is correctly sized
       renderExistingPins(camp.id);
-    } catch(e) {}
+    } catch(e) {
+      // TEMPORARY DEBUG: surface the error instead of silently swallowing it
+      let debugBox = document.getElementById('pin-debug-box');
+      if (!debugBox) {
+        debugBox = document.createElement('div');
+        debugBox.id = 'pin-debug-box';
+        debugBox.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#400;color:#f88;font-family:monospace;font-size:11px;padding:10px 14px;border-radius:8px;z-index:99999;max-width:380px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
+        document.body.appendChild(debugBox);
+      }
+      debugBox.textContent = 'IFRAME ONLOAD ERROR: ' + e.message;
+    }
   };
   renderClientComments(camp.id);
 }
