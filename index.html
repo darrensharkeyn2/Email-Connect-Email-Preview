@@ -760,51 +760,27 @@ function renderClientView() {
     try {
       const h = iframe.contentDocument.body.scrollHeight;
       iframe.style.height = (h + 40) + 'px';
-      // Block link navigation without disabling text selection
-      iframe.contentDocument.addEventListener('click', (e) => {
-        const link = e.target.closest('a, button');
-        if (link) e.preventDefault();
-      }, true);
-      // TEMPORARY DEBUG: shows exactly what happens on click, remove once pins are confirmed working
-      let debugBox = document.getElementById('pin-debug-box');
-      if (!debugBox) {
-        debugBox = document.createElement('div');
-        debugBox.id = 'pin-debug-box';
-        debugBox.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px 14px;border-radius:8px;z-index:99999;max-width:380px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
-        debugBox.textContent = 'Pin debug: waiting for click...';
-        document.body.appendChild(debugBox);
-      }
-      // Pin placement: click anywhere on the email to drop a pin (works regardless of text selection)
-      iframe.contentDocument.addEventListener('click', (e) => {
-        try {
-          // If user just made a text selection, don't also drop a pin
-          const sel = iframe.contentDocument.getSelection ? iframe.contentDocument.getSelection().toString().trim() : '';
-          if (sel) { debugBox.textContent = 'Click ignored — text was selected: "' + sel.slice(0,30) + '"'; return; }
-          const docEl = iframe.contentDocument.documentElement;
-          const fullWidth = docEl.scrollWidth || docEl.clientWidth;
-          const fullHeight = docEl.scrollHeight || docEl.clientHeight;
-          const xPercent = (e.pageX / fullWidth) * 100;
-          const yPercent = (e.pageY / fullHeight) * 100;
-          debugBox.textContent = 'CLICK FIRED — target: ' + e.target.tagName + ' | pageX:' + e.pageX + ' pageY:' + e.pageY + ' | fullW:' + fullWidth + ' fullH:' + fullHeight + ' | xPercent:' + xPercent.toFixed(1) + ' yPercent:' + yPercent.toFixed(1);
-          placePin(xPercent, yPercent);
-        } catch(innerErr) {
-          debugBox.textContent = 'ERROR inside click handler: ' + innerErr.message;
-        }
-      });
-      // Render existing pins AFTER the iframe height is set, so the container is correctly sized
-      renderExistingPins(camp.id);
-    } catch(e) {
-      // TEMPORARY DEBUG: surface the error instead of silently swallowing it
-      let debugBox = document.getElementById('pin-debug-box');
-      if (!debugBox) {
-        debugBox = document.createElement('div');
-        debugBox.id = 'pin-debug-box';
-        debugBox.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#400;color:#f88;font-family:monospace;font-size:11px;padding:10px 14px;border-radius:8px;z-index:99999;max-width:380px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
-        document.body.appendChild(debugBox);
-      }
-      debugBox.textContent = 'IFRAME ONLOAD ERROR: ' + e.message;
-    }
+    } catch(e) {}
+    // Render existing pins after height is set
+    renderExistingPins(camp.id);
   };
+
+  // Pin placement on the OUTER container — completely avoids iframe.contentDocument access
+  // which fails silently on complex third-party email HTML (GHL emails, MSO conditional comments etc.)
+  const pinContainer = document.getElementById('email-pin-container');
+  if (pinContainer && !pinContainer.dataset.pinListenerAttached) {
+    pinContainer.dataset.pinListenerAttached = 'true';
+    pinContainer.addEventListener('click', (e) => {
+      // Ignore clicks on the pin markers themselves
+      if (e.target.classList.contains('pin')) return;
+      const rect = pinContainer.getBoundingClientRect();
+      const containerHeight = pinContainer.offsetHeight || rect.height;
+      const containerWidth = pinContainer.offsetWidth || rect.width;
+      const xPercent = ((e.clientX - rect.left) / containerWidth) * 100;
+      const yPercent = ((e.clientY - rect.top + pinContainer.scrollTop) / containerHeight) * 100;
+      placePin(xPercent, yPercent);
+    });
+  }
   renderClientComments(camp.id);
 }
 
