@@ -778,9 +778,12 @@ function renderClientView() {
       const containerWidth = container.offsetWidth;
       const containerHeight = container.offsetHeight;
       const xPercent = ((e.clientX - rect.left) / containerWidth) * 100;
-      // Account for how far the page has scrolled so pin lands at the right vertical position
+      // clientY is relative to the viewport — add scrollY to get position relative to the
+      // full document, then subtract the container's top from the document origin
       const scrollY = window.scrollY || document.documentElement.scrollTop;
-      const yPercent = ((e.clientY - rect.top + scrollY) / containerHeight) * 100;
+      const containerTopFromDoc = rect.top + scrollY;
+      const clickYFromDocTop = e.clientY + scrollY;
+      const yPercent = ((clickYFromDocTop - containerTopFromDoc) / containerHeight) * 100;
       placePin(xPercent, yPercent);
       // Turn off overlay after placing pin so client can scroll/read the email normally
       activatePinMode(false);
