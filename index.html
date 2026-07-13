@@ -296,6 +296,8 @@
           </div>
           <div style="position:relative;" id="email-pin-container">
             <iframe class="email-iframe" id="client-email-iframe" sandbox="allow-same-origin allow-popups allow-scripts"></iframe>
+            <!-- Transparent overlay catches clicks at parent-page level, avoiding iframe.contentDocument entirely -->
+            <div id="pin-click-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;cursor:crosshair;display:none;"></div>
           </div>
         </div>
       </div>
@@ -314,6 +316,7 @@
       </div>
       <div class="comment-form">
         <input class="name-input" id="commenter-name" placeholder="" />
+        <button id="pin-mode-btn" onclick="activatePinMode(document.getElementById('pin-click-overlay').style.display !== 'block')" style="width:100%;padding:8px;border:0.5px dashed rgba(0,0,0,0.2);border-radius:8px;background:transparent;font-size:13px;cursor:pointer;text-align:left;color:#555;margin-bottom:2px;">📍 Drop a pin</button>
         <textarea class="comment-textarea" id="comment-body" placeholder="Describe what you'd like changed..."></textarea>
         <div>
           <button class="attach-btn" onclick="document.getElementById('image-upload').click()">
@@ -765,20 +768,22 @@ function renderClientView() {
     renderExistingPins(camp.id);
   };
 
-  // Pin placement on the OUTER container — completely avoids iframe.contentDocument access
-  // which fails silently on complex third-party email HTML (GHL emails, MSO conditional comments etc.)
-  const pinContainer = document.getElementById('email-pin-container');
-  if (pinContainer && !pinContainer.dataset.pinListenerAttached) {
-    pinContainer.dataset.pinListenerAttached = 'true';
-    pinContainer.addEventListener('click', (e) => {
-      // Ignore clicks on the pin markers themselves
-      if (e.target.classList.contains('pin')) return;
-      const rect = pinContainer.getBoundingClientRect();
-      const containerHeight = pinContainer.offsetHeight || rect.height;
-      const containerWidth = pinContainer.offsetWidth || rect.width;
+  // Pin overlay: sits on top of iframe, catches clicks without needing iframe.contentDocument
+  const pinOverlay = document.getElementById('pin-click-overlay');
+  if (pinOverlay && !pinOverlay.dataset.pinListenerAttached) {
+    pinOverlay.dataset.pinListenerAttached = 'true';
+    pinOverlay.addEventListener('click', (e) => {
+      const container = document.getElementById('email-pin-container');
+      const rect = container.getBoundingClientRect();
+      const containerWidth = container.offsetWidth;
+      const containerHeight = container.offsetHeight;
       const xPercent = ((e.clientX - rect.left) / containerWidth) * 100;
-      const yPercent = ((e.clientY - rect.top + pinContainer.scrollTop) / containerHeight) * 100;
+      // Account for how far the page has scrolled so pin lands at the right vertical position
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const yPercent = ((e.clientY - rect.top + scrollY) / containerHeight) * 100;
       placePin(xPercent, yPercent);
+      // Turn off overlay after placing pin so client can scroll/read the email normally
+      activatePinMode(false);
     });
   }
   renderClientComments(camp.id);
@@ -900,6 +905,19 @@ function clearHighlight() {
 }
 
 // ─── PIN SYSTEM (additive — does not touch highlight system above) ──────────
+function activatePinMode(on) {
+  const overlay = document.getElementById('pin-click-overlay');
+  const btn = document.getElementById('pin-mode-btn');
+  if (!overlay) return;
+  if (on) {
+    overlay.style.display = 'block';
+    if (btn) { btn.textContent = '✕ Cancel pin'; btn.style.background = '#f97040'; }
+  } else {
+    overlay.style.display = 'none';
+    if (btn) { btn.textContent = '📍 Drop a pin'; btn.style.background = ''; }
+  }
+}
+
 function placePin(xPercent, yPercent) {
   selectedPin = { xPercent, yPercent };
   renderPendingPin();
@@ -914,6 +932,7 @@ function clearPin() {
   selectedPin = null;
   const existing = document.getElementById('pending-pin-marker');
   if (existing) existing.remove();
+  activatePinMode(false);
 }
 
 function renderPendingPin() {
